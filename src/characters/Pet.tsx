@@ -4,12 +4,13 @@ import Svg, { Circle, Defs, Ellipse, G, Path } from 'react-native-svg';
 
 import type { PetSpecies } from '@/data/types';
 import type { Mood } from '@/game/engine';
+import { DragonArt, DRAGON_HEAD } from './Dragon';
 import { Ball, darken, Drop, Glow, Iris, lighten, OUTLINE, useGradientIds } from './paint';
 
 export const PETS: { id: PetSpecies; name: string; body: string; belly: string; accent: string; eyes: string }[] = [
   { id: 'cat', name: 'Cat', body: '#FFAE5C', belly: '#FFE6C7', accent: '#E07F2C', eyes: '#2E9E6A' },
   { id: 'bunny', name: 'Bunny', body: '#EEE8FF', belly: '#FFFFFF', accent: '#FF8CC4', eyes: '#7A55E8' },
-  { id: 'dino', name: 'Dino', body: '#5FD68F', belly: '#D2F7DF', accent: '#24A35F', eyes: '#B8622A' },
+  { id: 'dino', name: 'Dragon', body: '#5FD68F', belly: '#D2F7DF', accent: '#24A35F', eyes: '#B8622A' },
 ];
 
 const INK = '#2A1F3D';
@@ -114,6 +115,12 @@ export function Pet({ species, mood = 'happy', size = 90, stage = 1, accessory =
   };
   const dark = darken(p.body, 0.2);
   const legendary = stage >= 4;
+  // The dragon has its own art per stage; the others share the round body
+  const dragon = species === 'dino';
+  // Accessories and the crown are drawn for a head at (60,60) of radius ~35: move them onto the dragon's head
+  const head = DRAGON_HEAD[Math.max(0, Math.min(4, stage))];
+  const k = head.r / 35;
+  const headAnchor = dragon ? `translate(${head.x - 60 * k} ${head.y - 60 * k}) scale(${k})` : '';
   const scale = STAGE_SCALE[Math.max(0, Math.min(4, stage))];
 
   return (
@@ -140,6 +147,26 @@ export function Pet({ species, mood = 'happy', size = 90, stage = 1, accessory =
         <Ellipse cx="60" cy="112" rx={38 * scale} ry="6" fill={ids.shadow.url} />
 
         <G transform={`translate(60 110) scale(${scale}) translate(-60 -110)`}>
+        {dragon ? (
+          <G>
+            <DragonArt stage={stage} />
+            {/* the picture can't change its face, so sadness shows as a tear by the eye */}
+            {mood === 'sad' && (
+              <G transform={headAnchor}>
+                <Path d="M78 58 Q83 68 78 72 Q73 68 78 58 Z" fill={ids.tear.url} {...OUTLINE} />
+              </G>
+            )}
+            {legendary && (
+              <G transform={headAnchor}>
+                <Path d="M42 36 L44 18 L52 28 L60 14 L68 28 L76 18 L78 36 Q60 32 42 36 Z" fill={ids.gold.url} {...OUTLINE} />
+                <Circle cx="60" cy="25" r="3" fill="#FF4D5E" />
+                <Circle cx="47" cy="29" r="2" fill="#7CC6FF" />
+                <Circle cx="73" cy="29" r="2" fill="#7CC6FF" />
+              </G>
+            )}
+          </G>
+        ) : (
+          <G>
         {/* legendary wings fan out behind everything */}
         {legendary && (
           <G>
@@ -172,27 +199,10 @@ export function Pet({ species, mood = 'happy', size = 90, stage = 1, accessory =
             <Circle cx="100" cy="94" r="9" fill={ids.body.url} {...OUTLINE} />
           </G>
         )}
-        {species === 'dino' && (
-          <G>
-            <Path d="M94 84 Q116 90 118 70 Q108 80 94 76 Z" fill={ids.body.url} {...OUTLINE} />
-            <Path
-              d="M36 42 L42 26 L49 38 L56 20 L63 37 L71 24 L77 40 L84 32 L86 46 Z"
-              fill={ids.accent.url}
-              {...OUTLINE}
-            />
-          </G>
-        )}
 
         {/* body */}
         <Ellipse cx="60" cy="70" rx="40" ry="37" fill={ids.body.url} {...OUTLINE} />
         <Ellipse cx="60" cy="86" rx="24" ry="17" fill={ids.belly.url} />
-        {species === 'dino' && (
-          <G fill={p.accent} opacity={0.45}>
-            <Ellipse cx="28" cy="80" rx="4" ry="3" />
-            <Ellipse cx="92" cy="78" rx="5" ry="3.5" />
-            <Ellipse cx="86" cy="92" rx="3" ry="2.2" />
-          </G>
-        )}
         {species === 'cat' && (
           <G stroke={p.accent} strokeWidth={2.6} strokeLinecap="round" opacity={0.75}>
             <Path d="M54 36 L55 44" />
@@ -251,12 +261,6 @@ export function Pet({ species, mood = 'happy', size = 90, stage = 1, accessory =
             ))}
           </G>
         )}
-        {stage >= 3 && species === 'dino' && (
-          <G>
-            <Path d="M42 40 L38 24 L50 36 Z M78 40 L82 24 L70 36 Z" fill="#FFF3D6" {...OUTLINE} />
-            <Path d="M48 80 H72 M46 88 H74 M48 96 H72" stroke={darken(p.belly, 0.25)} strokeWidth={2} strokeLinecap="round" />
-          </G>
-        )}
         {legendary && (
           <G>
             <Path d="M42 36 L44 18 L52 28 L60 14 L68 28 L76 18 L78 36 Q60 32 42 36 Z" fill={ids.gold.url} {...OUTLINE} />
@@ -266,6 +270,10 @@ export function Pet({ species, mood = 'happy', size = 90, stage = 1, accessory =
           </G>
         )}
 
+          </G>
+        )}
+
+        <G transform={headAnchor}>
         {/* shop accessories */}
         {accessory === 'party_hat' && !legendary && (
           <G>
@@ -295,6 +303,7 @@ export function Pet({ species, mood = 'happy', size = 90, stage = 1, accessory =
             <Path d="M37 60 L43 60 M67 60 L73 60" stroke="#FFFFFF" strokeOpacity={0.7} strokeWidth={2.5} strokeLinecap="round" />
           </G>
         )}
+        </G>
         </G>
 
         {(mood === 'celebrate' || legendary) && (
