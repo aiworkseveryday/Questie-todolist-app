@@ -4,8 +4,7 @@ import { Alert, View } from 'react-native';
 import { AppText } from '@/components/AppText';
 import { Button3D } from '@/components/Button3D';
 import { Card } from '@/components/Card';
-import { Hero } from '@/characters/Hero';
-import { HeroCustomizer, PetPicker } from '@/components/CharacterPickers';
+import { HeroPicker, PetPicker } from '@/components/CharacterPickers';
 import { Chip, ChipRow } from '@/components/Chip';
 import { Input } from '@/components/Input';
 import { Screen } from '@/components/Screen';
@@ -20,8 +19,7 @@ const THEMES: { id: ThemePreference; label: string }[] = [
 ];
 
 export default function Settings() {
-  const { profile, updateProfile, resetAll, pickStyle } = useGame();
-  const [styleError, setStyleError] = useState<string | null>(null);
+  const { profile, updateProfile, resetAll } = useGame();
   const { preference, setPreference } = useTheme();
   const [name, setName] = useState(profile?.name ?? '');
   const [petName, setPetName] = useState(profile?.pet_name ?? '');
@@ -56,27 +54,8 @@ export default function Settings() {
       </Card>
 
       <Card style={{ gap: space.md }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <AppText variant="heading">Hero</AppText>
-          <AppText variant="label" color="#C98A00">
-            🪙 {profile.coins}
-          </AppText>
-        </View>
-        <View style={{ alignItems: 'center' }}>
-          <Hero style={profile} size={80} />
-        </View>
-        <HeroCustomizer
-          value={profile}
-          owned={profile.owned}
-          onGender={(gender) => updateProfile({ gender })}
-          onSkin={(skin) => updateProfile({ skin })}
-          onPick={async (kind, o) => setStyleError(await pickStyle(kind, o))}
-        />
-        {styleError && (
-          <AppText variant="caption" color="#E23E53" center>
-            {styleError}
-          </AppText>
-        )}
+        <AppText variant="heading">Hero</AppText>
+        <HeroPicker gender={profile.gender} look={profile.look} onChange={(v) => updateProfile(v)} />
       </Card>
 
       <Card style={{ gap: space.md }}>

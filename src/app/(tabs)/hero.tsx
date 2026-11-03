@@ -83,7 +83,7 @@ export default function HeroScreen() {
     <Screen>
       <Card fill={tint(colors.primary, 0.12)} edge={tint(colors.primary, 0.3)} style={styles.stage}>
         <View style={styles.pair}>
-          <Hero style={profile} size={80} />
+          <Hero gender={profile.gender} look={profile.look} size={130} />
           <Pet
             species={profile.pet}
             mood={petMood(status.state, profile.fed_on === toISODate(new Date()))}
