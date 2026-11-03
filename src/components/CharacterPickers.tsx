@@ -7,6 +7,7 @@ import { PETS, Pet } from '@/characters/Pet';
 import type { PetSpecies } from '@/data/types';
 import {
   HAIR_COLORS,
+  hairHex,
   HAIR_STYLES,
   OUTFITS,
   SKIN_TONES,
@@ -148,7 +149,7 @@ export function HeroCustomizer({ value, owned, onGender, onSkin, onPick }: Custo
               }}
               style={[
                 styles.swatch,
-                { backgroundColor: (c as { hex: string }).hex, borderColor: value.hair_color === c.id ? colors.primary : colors.border },
+                { backgroundColor: hairHex(c.id), borderColor: value.hair_color === c.id ? colors.primary : colors.border },
               ]}>
               {!!price && <MaterialCommunityIcons name="lock" size={14} color="#FFFFFF" />}
             </Pressable>

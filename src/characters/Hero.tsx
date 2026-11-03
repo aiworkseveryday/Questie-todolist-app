@@ -7,6 +7,16 @@ import { Ball, darken, Drop, Glow, lighten, OUTLINE, useGradientIds } from './pa
 
 const INK = '#2A1F3D';
 
+/** A sleeve or limb drawn as a thick rounded stroke with a soft outline. */
+function Limb({ d, color, width }: { d: string; color: string; width: number }) {
+  return (
+    <G>
+      <Path d={d} stroke={INK} strokeOpacity={0.22} strokeWidth={width + 2.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      <Path d={d} stroke={color} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </G>
+  );
+}
+
 /** Colours for each outfit: main garment, trim/lining, pants, shoes and glow accents. */
 const OUTFIT_COLORS: Record<string, { main: string; trim: string; pants: string; shoe: string; accent: string }> = {
   bomber: { main: '#4E7A55', trim: '#F08A3C', pants: '#2F3550', shoe: '#F2F2F5', accent: '#F08A3C' },
@@ -70,7 +80,7 @@ function BackHair({ hair, fill }: { hair: string; fill: string }) {
 
 /** Hair drawn over the head. */
 function FrontHair({ hair, fill, shine }: { hair: string; fill: string; shine: string }) {
-  const gloss = <Path d="M46 20 Q58 13 72 17" stroke={shine} strokeOpacity={0.45} strokeWidth={3} strokeLinecap="round" fill="none" />;
+  const gloss = <Path d="M47 24 Q58 19 71 22" stroke={shine} strokeOpacity={0.45} strokeWidth={3} strokeLinecap="round" fill="none" />;
   switch (hair) {
     case 'undercut':
       return (
@@ -134,7 +144,6 @@ function FrontHair({ hair, fill, shine }: { hair: string; fill: string; shine: s
       return (
         <G>
           <Path d="M39 40 C37 12 83 12 81 40 C79 31 71 26 60 26.5 C49 26 41 31 39 40 Z" fill={fill} {...OUTLINE} />
-          <Path d="M48 27 L46 33 M58 26 L57 32 M68 27 L70 33" stroke={darken(fill, 0.2)} strokeWidth={1.5} strokeLinecap="round" />
           {gloss}
         </G>
       );
@@ -174,8 +183,9 @@ export function Hero({ style, size = 120, bounce = true }: Props) {
   // Narrower shoulders and a waist for female builds
   const torso = female
     ? 'M42 66 Q60 61 78 66 L80 82 Q76 92 78 104 L82 118 Q60 124 38 118 L42 104 Q44 92 40 82 Z'
-    : 'M37 67 Q60 60 83 67 L85 90 L84 118 Q60 124 36 118 L35 90 Z';
-  const shoulder = female ? 41 : 36;
+    : 'M34 67 Q60 59 86 67 L84 90 L82 118 Q60 124 38 118 L36 90 Z';
+  const shoulder = female ? 41 : 35;
+  const rs = 120 - shoulder;
   const iris = darken(hair === '#D5DAE6' ? '#7A55E8' : hair, 0.1);
   const gloves = outfit === 'tactical' || outfit === 'street';
 
@@ -203,42 +213,33 @@ export function Hero({ style, size = 120, bounce = true }: Props) {
         {outfit === 'ranger' && <Path d="M38 100 L32 156 L50 150 L60 120 L70 150 L88 156 L82 100 Z" fill={ids.main.url} {...OUTLINE} />}
 
         {/* legs and shoes, slight heroic stance */}
-        <Path d="M44 114 L58 114 L57 178 L45 178 Q42 146 44 114 Z" fill={ids.pants.url} {...OUTLINE} />
-        <Path d="M62 114 L76 114 Q78 146 75 178 L63 178 Z" fill={ids.pants.url} {...OUTLINE} />
+        <Path d="M44 114 L59 114 L54 178 L41 178 Q40 146 44 114 Z" fill={ids.pants.url} {...OUTLINE} />
+        <Path d="M61 114 L76 114 Q80 146 79 178 L66 178 Z" fill={ids.pants.url} {...OUTLINE} />
         {(outfit === 'tactical' || outfit === 'ranger') && (
           <G>
             <Rect x="44" y="140" width="10" height="9" rx="2" fill={darken(o.pants, 0.25)} />
             <Rect x="66" y="140" width="10" height="9" rx="2" fill={darken(o.pants, 0.25)} />
           </G>
         )}
-        {outfit === 'street' && <Path d="M47 120 L46 176 M73 120 L74 176" stroke={o.trim} strokeWidth={1.6} />}
-        <Path d="M41 177 Q41 172 47 172 L58 172 L59 186 L38 186 Q37 179 41 177 Z" fill={ids.shoe.url} {...OUTLINE} />
-        <Path d="M62 172 L73 172 Q79 172 79 177 Q83 179 82 186 L61 186 Z" fill={ids.shoe.url} {...OUTLINE} />
-        <Path d="M38 183 H59 M61 183 H82" stroke={darken(o.shoe, 0.35)} strokeWidth={2.5} />
-        <Path d="M45 177 L53 176 M67 176 L75 177" stroke={o.accent} strokeWidth={2} strokeLinecap="round" />
+        {outfit === 'street' && <Path d="M47 120 L43 176 M73 120 L77 176" stroke={o.trim} strokeWidth={1.6} />}
+        <Path d="M37 177 Q37 172 43 172 L55 172 L56 186 L34 186 Q33 179 37 177 Z" fill={ids.shoe.url} {...OUTLINE} />
+        <Path d="M65 172 L77 172 Q83 172 83 177 Q87 179 86 186 L64 186 Z" fill={ids.shoe.url} {...OUTLINE} />
+        <Path d="M34 183 H56 M64 183 H86" stroke={darken(o.shoe, 0.35)} strokeWidth={2.5} />
+        <Path d="M41 177 L49 176 M71 176 L79 177" stroke={o.accent} strokeWidth={2} strokeLinecap="round" />
 
         {/* neck */}
         <Rect x="54" y="54" width="12" height="14" rx="4" fill={darken(skin, 0.12)} />
 
-        {/* arms: sleeve plus hand */}
-        <Path
-          d={`M${shoulder} 68 Q${shoulder - 9} 70 ${shoulder - 10} 86 L${shoulder - 9} 122 L${shoulder} 122 L${shoulder + 3} 86 Z`}
-          fill={ids.main.url}
-          {...OUTLINE}
-        />
-        <Path
-          d={`M${120 - shoulder} 68 Q${129 - shoulder} 70 ${130 - shoulder} 86 L${129 - shoulder} 122 L${120 - shoulder} 122 L${117 - shoulder} 86 Z`}
-          fill={ids.main.url}
-          {...OUTLINE}
-        />
-        <Rect x={shoulder - 10} y="117" width="11" height="6" rx="2" fill={ids.trim.url} />
-        <Rect x={119 - shoulder} y="117" width="11" height="6" rx="2" fill={ids.trim.url} />
-        <Circle cx={shoulder - 4.5} cy="128" r="6" fill={gloves ? '#2A2533' : ids.skin.url} {...OUTLINE} />
-        <Circle cx={124.5 - shoulder} cy="128" r="6" fill={gloves ? '#2A2533' : ids.skin.url} {...OUTLINE} />
+        {/* arms: left hangs relaxed, right hand rests on the hip */}
+        <Limb d={`M${shoulder + 1} 72 Q${shoulder - 8} 96 ${shoulder - 7} 119`} color={ids.main.url} width={11} />
+        <Limb d={`M${rs - 1} 72 Q${rs + 12} 86 ${rs + 9} 97 Q${rs + 4} 104 ${rs - 4} 106`} color={ids.main.url} width={11} />
+        <Circle cx={shoulder - 7} cy="121" r="6" fill={ids.trim.url} />
+        <Circle cx={shoulder - 7} cy="126" r="6" fill={gloves ? '#2A2533' : ids.skin.url} {...OUTLINE} />
         {outfit === 'street' && (
           <G>
-            <Path d={`M${shoulder - 7} 80 L${shoulder - 7} 116 M${127 - shoulder} 80 L${127 - shoulder} 116`} stroke={o.trim} strokeWidth={2} />
-            <Rect x={121 - shoulder} y="108" width="8" height="5" rx="1.5" fill={o.accent} />
+            <Path d={`M${shoulder + 1} 72 Q${shoulder - 8} 96 ${shoulder - 7} 116`} stroke={o.trim} strokeWidth={1.8} fill="none" />
+            <Path d={`M${rs - 1} 72 Q${rs + 12} 86 ${rs + 9} 97`} stroke={o.trim} strokeWidth={1.8} fill="none" />
+            <Rect x={shoulder - 11} y="112" width="8" height="5" rx="1.5" fill={o.accent} />
           </G>
         )}
 
@@ -308,12 +309,15 @@ export function Hero({ style, size = 120, bounce = true }: Props) {
             <Circle cx="60" cy="84" r="5" fill={ids.glow.url} />
             <Circle cx="60" cy="84" r="2.5" fill="#FFFFFF" />
             <Ellipse cx={shoulder - 1} cy="70" rx="10" ry="7" fill={ids.main.url} {...OUTLINE} />
-            <Ellipse cx={121 - shoulder} cy="70" rx="10" ry="7" fill={ids.main.url} {...OUTLINE} />
-            <Path d={`M${shoulder - 8} 70 H${shoulder + 6} M${114 - shoulder} 70 H${128 - shoulder}`} stroke={o.accent} strokeWidth={1.6} />
+            <Ellipse cx={rs + 1} cy="70" rx="10" ry="7" fill={ids.main.url} {...OUTLINE} />
+            <Path d={`M${shoulder - 8} 70 H${shoulder + 6} M${rs - 6} 70 H${rs + 8}`} stroke={o.accent} strokeWidth={1.6} />
             <Rect x="36" y="110" width="48" height="6" rx="3" fill={o.trim} />
             <Rect x="54" y="109" width="12" height="8" rx="2" fill={o.accent} />
           </G>
         )}
+
+        {/* the hand on the hip sits in front of the outfit */}
+        <Circle cx={rs - 6} cy="106" r="6" fill={gloves ? '#2A2533' : ids.skin.url} {...OUTLINE} />
 
         {/* head */}
         <Ellipse cx="39" cy="42" rx="4" ry="6" fill={ids.skin.url} {...OUTLINE} />
