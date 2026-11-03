@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "Questie",
+    "slug": "questie",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "questie",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "icon": "./assets/images/icon.png",
+      "bundleIdentifier": "com.aiworkseveryday.questie"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#EEE9FF",
+        "foregroundImage": "./assets/images/android-icon-foreground.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.aiworkseveryday.questie"
+    },
+    "web": {
+      "output": "single",
+      "favicon": "./assets/images/icon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#EEE9FF",
+          "image": "./assets/images/android-icon-foreground.png",
+          "imageWidth": 180,
+          "dark": {
+            "backgroundColor": "#14121F",
+            "image": "./assets/images/android-icon-foreground.png"
+          }
+        }
+      ],
+      "expo-sqlite",
+      "expo-font",
+      "./plugins/with-long-path-cmake"
+    ],
+    "experiments": {
+      "typedRoutes": false,
+      "reactCompiler": true
+    }
+  }
+}

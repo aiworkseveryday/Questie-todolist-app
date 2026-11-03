@@ -1,0 +1,107 @@
+import type { Item, Profile } from '@/data/types';
+import { applyStreak, gain, isDueOn, levelFor, penalty, petMood, streakStatus } from './engine';
+
+const base: Profile = {
+  name: 'me',
+  gender: 'female',
+  look: 0,
+  pet: 'cat',
+  pet_name: 'Mochi',
+  xp: 0,
+  coins: 0,
+  streak: 0,
+  best_streak: 0,
+  last_active_on: null,
+  freeze_tokens: 0,
+  onboarded: true,
+};
+// Tuesday
+const today = new Date(2026, 10, 3);
+
+describe('applyStreak', () => {
+  it('starts a streak and does not double count today', () => {
+    const r = applyStreak(base, today);
+    expect(r.patch.streak).toBe(1);
+    expect(r.patch.last_active_on).toBe('2026-11-03');
+    const again = applyStreak({ ...base, ...r.patch }, today);
+    expect(again.increased).toBe(false);
+    expect(again.patch.streak).toBe(1);
+  });
+
+  it('extends from yesterday', () => {
+    const r = applyStreak({ ...base, streak: 4, best_streak: 4, last_active_on: '2026-11-02' }, today);
+    expect(r.patch.streak).toBe(5);
+    expect(r.patch.best_streak).toBe(5);
+  });
+
+  it('spends freeze tokens to bridge missed days', () => {
+    const r = applyStreak({ ...base, streak: 10, last_active_on: '2026-10-31', freeze_tokens: 2 }, today);
+    expect(r.freezesUsed).toBe(2);
+    expect(r.patch.freeze_tokens).toBe(0);
+    expect(r.patch.streak).toBe(11);
+  });
+
+  it('restarts when tokens cannot cover the gap but keeps the best streak', () => {
+    const r = applyStreak({ ...base, streak: 10, best_streak: 10, last_active_on: '2026-10-30', freeze_tokens: 2 }, today);
+    expect(r.patch.streak).toBe(1);
+    expect(r.patch.freeze_tokens).toBe(2);
+    expect(r.patch.best_streak).toBe(10);
+  });
+
+  it('earns a token every 7 days up to the cap', () => {
+    const r = applyStreak({ ...base, streak: 6, last_active_on: '2026-11-02' }, today);
+    expect(r.tokenEarned).toBe(true);
+    expect(r.patch.freeze_tokens).toBe(1);
+    const capped = applyStreak({ ...base, streak: 13, last_active_on: '2026-11-02', freeze_tokens: 3 }, today);
+    expect(capped.tokenEarned).toBe(false);
+    expect(capped.patch.freeze_tokens).toBe(3);
+  });
+});
+
+describe('streakStatus and mood', () => {
+  it('reports each state', () => {
+    expect(streakStatus(base, today)).toEqual({ streak: 0, state: 'pending' });
+    expect(streakStatus({ ...base, streak: 3, last_active_on: '2026-11-03' }, today).state).toBe('done');
+    expect(streakStatus({ ...base, streak: 3, last_active_on: '2026-11-02' }, today).state).toBe('pending');
+    expect(streakStatus({ ...base, streak: 3, last_active_on: '2026-11-01', freeze_tokens: 1 }, today).state).toBe('frozen');
+    expect(streakStatus({ ...base, streak: 3, last_active_on: '2026-11-01' }, today)).toEqual({ streak: 0, state: 'broken' });
+    expect(petMood('done')).toBe('happy');
+    expect(petMood('broken')).toBe('sad');
+  });
+});
+
+describe('xp', () => {
+  it('computes levels', () => {
+    expect(levelFor(0)).toEqual({ level: 1, intoLevel: 0, levelSize: 100, floor: 0 });
+    expect(levelFor(100).level).toBe(2);
+    expect(levelFor(260).level).toBe(3);
+  });
+
+  it('pays by difficulty and flags level ups', () => {
+    const r = gain({ ...base, xp: 90 }, 'hard', today);
+    expect(r.xp).toBe(35);
+    expect(r.coins).toBe(10);
+    expect(r.levelUp).toBe(true);
+    expect(r.newLevel).toBe(2);
+    expect(gain(base, 'easy', today).levelUp).toBe(false);
+  });
+
+  it('never penalises below the current level floor', () => {
+    expect(penalty({ xp: 50 }, 'hard')).toEqual({ xp: 35, lost: 15 });
+    expect(penalty({ xp: 104 }, 'medium')).toEqual({ xp: 100, lost: 4 });
+    expect(penalty({ xp: 0 }, 'easy')).toEqual({ xp: 0, lost: 0 });
+  });
+});
+
+describe('isDueOn', () => {
+  const item = (over: Partial<Item>): Item => ({
+    id: 1, kind: 'habit', title: 't', difficulty: 'easy', days: [0, 1, 2, 3, 4, 5, 6], due: null, done_on: null, sort: 0, ...over,
+  });
+  it('follows weekdays for habits and completion for todos', () => {
+    expect(isDueOn(item({ days: [2] }), today)).toBe(true);
+    expect(isDueOn(item({ days: [1, 3] }), today)).toBe(false);
+    expect(isDueOn(item({ kind: 'counter', days: [] }), today)).toBe(true);
+    expect(isDueOn(item({ kind: 'todo', done_on: '2026-11-03' }), today)).toBe(true);
+    expect(isDueOn(item({ kind: 'todo', done_on: '2026-11-01' }), today)).toBe(false);
+  });
+});
