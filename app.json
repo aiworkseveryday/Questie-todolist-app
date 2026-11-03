@@ -38,8 +38,15 @@
         }
       ],
       "expo-sqlite",
+      [
+        "expo-notifications",
+        {
+          "color": "#7C5CFF"
+        }
+      ],
       "expo-font",
-      "./plugins/with-long-path-cmake"
+      "./plugins/with-long-path-cmake",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": false,

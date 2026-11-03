@@ -1,5 +1,5 @@
 import type { Item, Profile } from '@/data/types';
-import { applyStreak, gain, isDueOn, levelFor, penalty, petMood, streakStatus } from './engine';
+import { applyStreak, gain, greeting, isDueOn, levelFor, nextPetStage, penalty, petMood, petStage, streakStatus, tapXp } from './engine';
 
 const base: Profile = {
   name: 'me',
@@ -14,6 +14,14 @@ const base: Profile = {
   last_active_on: null,
   freeze_tokens: 0,
   onboarded: true,
+  inventory: {},
+  fed_on: null,
+  owned: [],
+  pet_accessory: null,
+  hair: 'crop',
+  hair_color: 'brown',
+  skin: 1,
+  outfit: 'bomber',
 };
 // Tuesday
 const today = new Date(2026, 10, 3);
@@ -93,9 +101,37 @@ describe('xp', () => {
   });
 });
 
+describe('multi-tap habits and greeting', () => {
+  it('pays a small amount per tap only when there is a target', () => {
+    expect(tapXp('easy', 1)).toBe(0);
+    expect(tapXp('easy', 8)).toBe(1);
+    expect(tapXp('hard', 4)).toBe(5);
+  });
+
+  it('greets by time of day', () => {
+    expect(greeting(new Date(2026, 10, 3, 7))).toBe('Good morning');
+    expect(greeting(new Date(2026, 10, 3, 13))).toBe('Good afternoon');
+    expect(greeting(new Date(2026, 10, 3, 19))).toBe('Good evening');
+    expect(greeting(new Date(2026, 10, 3, 23))).toBe('Good night');
+    expect(greeting(new Date(2026, 10, 3, 3))).toBe('Good night');
+  });
+});
+
+describe('pet stages', () => {
+  it('grows with hero level', () => {
+    expect(petStage(1)).toBe(0);
+    expect(petStage(4)).toBe(0);
+    expect(petStage(5)).toBe(1);
+    expect(petStage(19)).toBe(2);
+    expect(petStage(30)).toBe(4);
+    expect(nextPetStage(7)).toEqual({ name: 'Teen', level: 10 });
+    expect(nextPetStage(40)).toBeNull();
+  });
+});
+
 describe('isDueOn', () => {
   const item = (over: Partial<Item>): Item => ({
-    id: 1, kind: 'habit', title: 't', difficulty: 'easy', days: [0, 1, 2, 3, 4, 5, 6], due: null, done_on: null, sort: 0, ...over,
+    id: 1, kind: 'habit', title: 't', difficulty: 'easy', days: [0, 1, 2, 3, 4, 5, 6], target: 1, due: null, due_time: null, notif_id: null, done_on: null, sort: 0, ...over,
   });
   it('follows weekdays for habits and completion for todos', () => {
     expect(isDueOn(item({ days: [2] }), today)).toBe(true);

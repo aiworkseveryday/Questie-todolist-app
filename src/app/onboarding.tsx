@@ -6,12 +6,14 @@ import { Hero } from '@/characters/Hero';
 import { Pet } from '@/characters/Pet';
 import { AppText } from '@/components/AppText';
 import { Button3D } from '@/components/Button3D';
-import { HeroPicker, PetPicker } from '@/components/CharacterPickers';
+import { HeroCustomizer, PetPicker } from '@/components/CharacterPickers';
 import { Input } from '@/components/Input';
 import { ProgressBar } from '@/components/Progress';
 import { Screen } from '@/components/Screen';
 import { useGame } from '@/data/store';
-import type { HeroGender, PetSpecies } from '@/data/types';
+import { PROFILE_DEFAULTS } from '@/data/db';
+import type { PetSpecies } from '@/data/types';
+import type { HeroStyle } from '@/game/style';
 import { space } from '@/theme/tokens';
 
 const STEPS = 4;
@@ -20,7 +22,13 @@ export default function Onboarding() {
   const { createProfile } = useGame();
   const [step, setStep] = useState(0);
   const [name, setName] = useState('');
-  const [hero, setHero] = useState<{ gender: HeroGender; look: number }>({ gender: 'female', look: 0 });
+  const [hero, setHero] = useState<HeroStyle>({
+    gender: 'female',
+    hair: 'ponytail',
+    hair_color: PROFILE_DEFAULTS.hair_color,
+    skin: PROFILE_DEFAULTS.skin,
+    outfit: PROFILE_DEFAULTS.outfit,
+  });
   const [pet, setPet] = useState<PetSpecies>('cat');
   const [petName, setPetName] = useState('');
   const [saving, setSaving] = useState(false);
@@ -30,7 +38,7 @@ export default function Onboarding() {
   const next = async () => {
     if (step < STEPS - 1) return setStep(step + 1);
     setSaving(true);
-    await createProfile({ name: name.trim(), ...hero, pet, pet_name: petName.trim() });
+    await createProfile({ name: name.trim(), ...hero, look: 0, pet, pet_name: petName.trim() });
   };
 
   return (
@@ -52,7 +60,7 @@ export default function Onboarding() {
         {step === 0 && (
           <View style={styles.center}>
             <View style={styles.pair}>
-              <Hero gender="female" look={0} size={110} />
+              <Hero style={hero} size={90} />
               <Pet species="cat" size={80} />
             </View>
             <AppText variant="hero" center>
@@ -74,9 +82,16 @@ export default function Onboarding() {
           <>
             <AppText variant="title">Choose your hero</AppText>
             <View style={styles.center}>
-              <Hero gender={hero.gender} look={hero.look} size={130} />
+              <Hero style={hero} size={110} />
             </View>
-            <HeroPicker gender={hero.gender} look={hero.look} onChange={setHero} />
+            <HeroCustomizer
+              value={hero}
+              onGender={(gender) => setHero((h) => ({ ...h, gender }))}
+              onSkin={(skin) => setHero((h) => ({ ...h, skin }))}
+              onPick={(kind, o) =>
+                setHero((h) => ({ ...h, ...(kind === 'hair' ? { hair: o.id } : kind === 'color' ? { hair_color: o.id } : { outfit: o.id }) }))
+              }
+            />
           </>
         )}
         {step === 3 && (

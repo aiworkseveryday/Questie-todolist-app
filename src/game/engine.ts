@@ -7,6 +7,23 @@ export const REWARD: Record<Difficulty, { xp: number; coins: number }> = {
   hard: { xp: 35, coins: 10 },
 };
 
+/**
+ * Small XP for each tap towards a multi-tap habit (e.g. 3/8 glasses of water).
+ * The tap that reaches the goal also pays the full REWARD, so a goal is worth ~1.5x a plain habit.
+ */
+export function tapXp(difficulty: Difficulty, target: number) {
+  return target > 1 ? Math.ceil(REWARD[difficulty].xp / (2 * target)) : 0;
+}
+
+/** Time-of-day greeting the pet opens with. */
+export function greeting(now = new Date()) {
+  const h = now.getHours();
+  if (h >= 5 && h < 12) return 'Good morning';
+  if (h >= 12 && h < 17) return 'Good afternoon';
+  if (h >= 17 && h < 21) return 'Good evening';
+  return 'Good night';
+}
+
 /** XP lost when tapping "-" on a bad habit */
 export const PENALTY: Record<Difficulty, number> = { easy: 5, medium: 10, hard: 15 };
 
@@ -118,10 +135,34 @@ export function penalty(p: Pick<Profile, 'xp'>, difficulty: Difficulty) {
   return { xp, lost: p.xp - xp };
 }
 
+/** Pets grow up as the hero levels: each stage looks clearly different. */
+export const PET_STAGES = [
+  { name: 'Baby', level: 1 },
+  { name: 'Kid', level: 5 },
+  { name: 'Teen', level: 10 },
+  { name: 'Adult', level: 20 },
+  { name: 'Legendary', level: 30 },
+] as const;
+
+/** Index into PET_STAGES for a hero level. */
+export function petStage(level: number) {
+  let stage = 0;
+  PET_STAGES.forEach((s, i) => {
+    if (level >= s.level) stage = i;
+  });
+  return stage;
+}
+
+/** The next stage and the level it unlocks at, or null at Legendary. */
+export function nextPetStage(level: number) {
+  return PET_STAGES[petStage(level) + 1] ?? null;
+}
+
 export type Mood = 'happy' | 'idle' | 'sad' | 'celebrate';
 
-export function petMood(state: StreakState): Mood {
-  if (state === 'done') return 'happy';
+/** A pet fed today is happy all day, even if the streak broke. */
+export function petMood(state: StreakState, fedToday = false): Mood {
+  if (fedToday || state === 'done') return 'happy';
   if (state === 'broken') return 'sad';
   return 'idle';
 }

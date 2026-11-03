@@ -10,6 +10,7 @@ import { fonts, palette, tint } from '@/theme/tokens';
 const TABS: { name: string; title: string; icon: TabIconName; color: string }[] = [
   { name: 'index', title: 'Today', icon: 'today', color: palette.violet },
   { name: 'hero', title: 'Hero', icon: 'hero', color: palette.orange },
+  { name: 'shop', title: 'Shop', icon: 'shop', color: palette.pink },
   { name: 'settings', title: 'Settings', icon: 'settings', color: palette.sky },
 ];
 

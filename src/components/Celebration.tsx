@@ -1,6 +1,7 @@
 import { Modal, StyleSheet, View } from 'react-native';
 
 import { Pet } from '@/characters/Pet';
+import { levelFor, petStage, PET_STAGES } from '@/game/engine';
 import { useGame } from '@/data/store';
 import { useTheme } from '@/theme/ThemeProvider';
 import { palette, radius, space } from '@/theme/tokens';
@@ -21,7 +22,8 @@ export function Celebration() {
   if (reward?.levelUp) {
     emoji = '⭐';
     title = `Level ${reward.newLevel}!`;
-    body = 'Your hero grew stronger. New unlocks are on the way.';
+    const grown = PET_STAGES.find((st) => st.level === reward.newLevel);
+    body = grown ? `${profile.pet_name} grew into a ${grown.name}! Look how big they are!` : 'Your hero grew stronger. New unlocks are on the way.';
     accent = palette.violet;
   } else if (reward?.tokenEarned) {
     emoji = '🧊';
@@ -36,7 +38,13 @@ export function Celebration() {
     <Modal visible={!!reward} transparent animationType="fade" onRequestClose={dismissReward}>
       <View style={styles.backdrop}>
         <View style={[styles.sheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Pet species={profile.pet} mood="celebrate" size={120} />
+          <Pet
+            species={profile.pet}
+            mood="celebrate"
+            stage={petStage(levelFor(profile.xp).level)}
+            accessory={profile.pet_accessory}
+            size={120}
+          />
           <AppText style={{ fontSize: 52, lineHeight: 60 }}>{emoji}</AppText>
           <AppText variant="title" center color={accent}>
             {title}

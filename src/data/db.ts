@@ -4,6 +4,21 @@ import type { Completion, Item, Profile } from './types';
 
 export const DB_NAME = 'questie.db';
 
+/** Fields added after the first release, with the values older profiles should start from */
+export const PROFILE_DEFAULTS: Pick<
+  Profile,
+  'inventory' | 'fed_on' | 'owned' | 'pet_accessory' | 'hair' | 'hair_color' | 'skin' | 'outfit'
+> = {
+  inventory: {},
+  fed_on: null,
+  owned: [],
+  pet_accessory: null,
+  hair: 'crop',
+  hair_color: 'brown',
+  skin: 1,
+  outfit: 'bomber',
+};
+
 // Each entry upgrades the schema by one version; never edit a shipped migration, append a new one.
 const MIGRATIONS = [
   `
@@ -27,6 +42,11 @@ const MIGRATIONS = [
   );
   CREATE INDEX completions_date ON completions(date);
   CREATE TABLE profile (id INTEGER PRIMARY KEY CHECK (id = 1), data TEXT NOT NULL);
+  `,
+  `
+  ALTER TABLE items ADD COLUMN target INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE items ADD COLUMN due_time TEXT;
+  ALTER TABLE items ADD COLUMN notif_id TEXT;
   `,
 ];
 
@@ -58,30 +78,35 @@ export function loadCompletions(db: SQLiteDatabase, date: string) {
 
 export async function loadProfile(db: SQLiteDatabase): Promise<Profile | null> {
   const row = await db.getFirstAsync<{ data: string }>('SELECT data FROM profile WHERE id = 1');
-  return row ? (JSON.parse(row.data) as Profile) : null;
+  // Profiles saved by older versions lack newer fields, so fill in their defaults
+  return row ? { ...PROFILE_DEFAULTS, ...(JSON.parse(row.data) as Profile) } : null;
 }
 
 export async function saveProfile(db: SQLiteDatabase, p: Profile) {
   await db.runAsync('INSERT OR REPLACE INTO profile (id, data) VALUES (1, ?)', JSON.stringify(p));
 }
 
-export type ItemDraft = Omit<Item, 'id' | 'sort' | 'done_on'> & { id?: number };
+export type ItemDraft = Omit<Item, 'id' | 'sort' | 'done_on' | 'notif_id'> & { id?: number };
 
 /** Inserts or updates an item and returns its id. */
 export async function saveItem(db: SQLiteDatabase, d: ItemDraft) {
   const days = d.days.join(',');
   if (d.id != null) {
     await db.runAsync(
-      'UPDATE items SET kind = ?, title = ?, difficulty = ?, days = ?, due = ? WHERE id = ?',
-      d.kind, d.title, d.difficulty, days, d.due, d.id,
+      'UPDATE items SET kind = ?, title = ?, difficulty = ?, days = ?, target = ?, due = ?, due_time = ? WHERE id = ?',
+      d.kind, d.title, d.difficulty, days, d.target, d.due, d.due_time, d.id,
     );
     return d.id;
   }
   const res = await db.runAsync(
-    'INSERT INTO items (kind, title, difficulty, days, due, sort) VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM items))',
-    d.kind, d.title, d.difficulty, days, d.due,
+    'INSERT INTO items (kind, title, difficulty, days, target, due, due_time, sort) VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM items))',
+    d.kind, d.title, d.difficulty, days, d.target, d.due, d.due_time,
   );
   return res.lastInsertRowId;
+}
+
+export async function setNotifId(db: SQLiteDatabase, id: number, notifId: string | null) {
+  await db.runAsync('UPDATE items SET notif_id = ? WHERE id = ?', notifId, id);
 }
 
 export async function deleteItem(db: SQLiteDatabase, id: number) {

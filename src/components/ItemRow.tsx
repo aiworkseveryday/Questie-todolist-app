@@ -11,10 +11,12 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
+import Svg, { Circle } from 'react-native-svg';
 import { scheduleOnRN } from 'react-native-worklets';
 
 import type { Difficulty, Item } from '@/data/types';
-import { REWARD } from '@/game/engine';
+import { REWARD, tapXp } from '@/game/engine';
+import { formatDue } from '@/lib/dates';
 import { useTheme } from '@/theme/ThemeProvider';
 import { palette, radius, space, tint } from '@/theme/tokens';
 import { AppText } from './AppText';
@@ -34,6 +36,10 @@ const SPRING = { damping: 18, stiffness: 220 };
 type Props = {
   item: Item;
   done: boolean;
+  /** Today's taps towards a multi-tap habit goal */
+  count: number;
+  /** Todo is past its due date/time */
+  overdue: boolean;
   /** Today's good/bad taps, for counter habits */
   plus: number;
   minus: number;
@@ -59,7 +65,42 @@ function XpBurst({ amount, color }: { amount: number; color: string }) {
   );
 }
 
-export function ItemRow({ item, done, plus, minus, onToggle, onTap, onEdit, onDelete }: Props) {
+/** Ring that fills as taps add up towards a daily goal, e.g. 3 of 8 glasses of water. */
+function GoalRing({ count, goal, color, track }: { count: number; goal: number; color: string; track: string }) {
+  const size = 36;
+  const stroke = 4;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const p = Math.min(1, count / goal);
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
+        <Circle cx={size / 2} cy={size / 2} r={r} stroke={track} strokeWidth={stroke} fill="none" />
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke={color}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          fill="none"
+          strokeDasharray={`${c} ${c}`}
+          strokeDashoffset={c * (1 - p)}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </Svg>
+      {p >= 1 ? (
+        <MaterialCommunityIcons name="check-bold" size={18} color={color} />
+      ) : (
+        <AppText variant="caption" style={{ fontSize: 11 }}>
+          {count}/{goal}
+        </AppText>
+      )}
+    </View>
+  );
+}
+
+export function ItemRow({ item, done, count, overdue, plus, minus, onToggle, onTap, onEdit, onDelete }: Props) {
   const { colors } = useTheme();
   const x = useSharedValue(0);
   const start = useSharedValue(0);
@@ -69,16 +110,22 @@ export function ItemRow({ item, done, plus, minus, onToggle, onTap, onEdit, onDe
   const isCounter = item.kind === 'counter';
   const accent = DIFFICULTY_COLOR[item.difficulty];
   const reward = REWARD[item.difficulty].xp;
+  const goal = item.kind === 'habit' ? Math.max(1, item.target) : 1;
+  const multi = goal > 1;
+  const step = tapXp(item.difficulty, goal);
 
   const complete = () => {
+    let amount = reward;
     if (isCounter) {
       onTap(1);
     } else {
       onToggle();
       if (done) return;
+      // A step towards the goal pays a little; the final tap pays the full reward too
+      amount = count + 1 < goal ? step : reward + step;
     }
     pop.value = withSequence(withSpring(1.25, { damping: 6 }), withSpring(1));
-    setBurst({ key: Date.now(), amount: reward });
+    setBurst({ key: Date.now(), amount });
   };
   const tick = () => Haptics.selectionAsync();
   const close = () => {
@@ -159,7 +206,14 @@ export function ItemRow({ item, done, plus, minus, onToggle, onTap, onEdit, onDe
                 styles.row,
                 { backgroundColor: colors.surface, borderColor: colors.border, opacity: done && !isCounter ? 0.6 : 1 },
               ]}>
-              {!isCounter && (
+              {multi && (
+                <Pressable accessibilityLabel={`${count} of ${goal} done`} onPress={complete} hitSlop={10}>
+                  <Animated.View style={checkStyle}>
+                    <GoalRing count={count} goal={goal} color={colors.success} track={colors.border} />
+                  </Animated.View>
+                </Pressable>
+              )}
+              {!isCounter && !multi && (
                 <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: done }} onPress={complete} hitSlop={10}>
                   <Animated.View
                     style={[
@@ -184,7 +238,25 @@ export function ItemRow({ item, done, plus, minus, onToggle, onTap, onEdit, onDe
                   <AppText variant="caption" muted>
                     +{reward} XP
                   </AppText>
+                  {multi && (
+                    <AppText variant="caption" muted>
+                      · {count}/{goal} today
+                    </AppText>
+                  )}
                 </View>
+                {item.kind === 'todo' && item.due && !done && (
+                  <View style={styles.meta}>
+                    <MaterialCommunityIcons
+                      name={item.due_time ? 'bell-ring-outline' : 'calendar'}
+                      size={14}
+                      color={overdue ? colors.danger : colors.textMuted}
+                    />
+                    <AppText variant="caption" color={overdue ? colors.danger : colors.textMuted}>
+                      {overdue ? 'Overdue · ' : ''}
+                      {formatDue(item.due, item.due_time)}
+                    </AppText>
+                  </View>
+                )}
               </View>
               {isCounter && (
                 <View style={styles.counter}>

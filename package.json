@@ -5,12 +5,14 @@
   "dependencies": {
     "@expo-google-fonts/nunito": "^0.4.2",
     "@expo/vector-icons": "^15.0.2",
+    "@react-native-community/datetimepicker": "9.2.1",
     "expo": "~58.0.22",
     "expo-constants": "~58.0.14",
     "expo-dev-client": "~58.0.18",
     "expo-font": "~58.0.11",
     "expo-haptics": "~58.0.7",
     "expo-linking": "~58.0.15",
+    "expo-notifications": "~58.1.7",
     "expo-router": "~58.0.29",
     "expo-splash-screen": "~58.0.12",
     "expo-sqlite": "~58.0.15",
@@ -48,6 +50,9 @@
   "private": true,
   "jest": {
     "preset": "jest-expo",
-    "testPathIgnorePatterns": ["/node_modules/", "/android/"]
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/android/"
+    ]
   }
 }

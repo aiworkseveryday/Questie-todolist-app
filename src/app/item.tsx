@@ -1,23 +1,25 @@
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 
 import { AppText } from '@/components/AppText';
 import { Button3D } from '@/components/Button3D';
-import { Chip, ChipRow } from '@/components/Chip';
+import { CalendarPicker } from '@/components/CalendarPicker';
 import { DIFFICULTY_COLOR } from '@/components/ItemRow';
 import { Input } from '@/components/Input';
 import { Screen } from '@/components/Screen';
 import { useGame } from '@/data/store';
 import type { Difficulty, ItemKind } from '@/data/types';
 import { REWARD } from '@/game/engine';
-import { addDays, toISODate } from '@/lib/dates';
+import { dueAt, formatClock } from '@/lib/dates';
 import { useTheme } from '@/theme/ThemeProvider';
 import { radius, space, tint } from '@/theme/tokens';
 
 const KINDS: { id: ItemKind; label: string; hint: string }[] = [
-  { id: 'habit', label: 'Habit', hint: 'Repeats on the days you choose. Keeps your streak alive.' },
+  { id: 'habit', label: 'Habit', hint: 'Repeats on the days you choose, once or several times a day. Keeps your streak alive.' },
   { id: 'counter', label: 'Good / Bad', hint: 'Tap + when you do the good thing, − when you slip. Any time, any day.' },
   { id: 'todo', label: 'To-do', hint: 'A one-off task. Disappears the day after you finish it.' },
 ];
@@ -25,15 +27,26 @@ const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard'];
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
-const dueOptions = () => {
-  const today = new Date();
-  return [
-    { label: 'No date', value: null },
-    { label: 'Today', value: toISODate(today) },
-    { label: 'Tomorrow', value: toISODate(addDays(today, 1)) },
-    { label: 'Next week', value: toISODate(addDays(today, 7)) },
-  ];
-};
+const pad = (n: number) => String(n).padStart(2, '0');
+
+/** Opens the system clock and returns "HH:MM", or null when cancelled. */
+function pickTime(initial: string | null, onPick: (hhmm: string) => void) {
+  const value = new Date();
+  if (initial) {
+    const [h, m] = initial.split(':').map(Number);
+    value.setHours(h, m, 0, 0);
+  } else {
+    value.setHours(value.getHours() + 1, 0, 0, 0);
+  }
+  DateTimePickerAndroid.open({
+    value,
+    mode: 'time',
+    is24Hour: false,
+    onChange: (event, date) => {
+      if (event.type === 'set' && date) onPick(`${pad(date.getHours())}:${pad(date.getMinutes())}`);
+    },
+  });
+}
 
 export default function ItemEditor() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -46,6 +59,10 @@ export default function ItemEditor() {
   const [difficulty, setDifficulty] = useState<Difficulty>(existing?.difficulty ?? 'easy');
   const [days, setDays] = useState<number[]>(existing?.days.length ? existing.days : ALL_DAYS);
   const [due, setDue] = useState<string | null>(existing?.due ?? null);
+  const [dueTime, setDueTime] = useState<string | null>(existing?.due_time ?? null);
+  const [target, setTarget] = useState(existing?.target ?? 1);
+  // iOS has no clock dialog, so its time picker renders inline
+  const [showIosTime, setShowIosTime] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const toggleDay = (d: number) => {
@@ -63,7 +80,9 @@ export default function ItemEditor() {
       title: title.trim(),
       difficulty,
       days: kind === 'habit' ? days : [],
+      target: kind === 'habit' ? target : 1,
       due: kind === 'todo' ? due : null,
+      due_time: kind === 'todo' && due ? dueTime : null,
     });
     router.back();
   };
@@ -169,16 +188,87 @@ export default function ItemEditor() {
         </View>
       )}
 
-      {kind === 'todo' && (
+      {kind === 'habit' && (
         <View style={{ gap: space.sm }}>
           <AppText variant="caption" muted upper>
-            Due
+            Times per day
           </AppText>
-          <ChipRow>
-            {dueOptions().map((o) => (
-              <Chip key={o.label} label={o.label} selected={due === o.value} onPress={() => setDue(o.value)} />
-            ))}
-          </ChipRow>
+          <View style={[styles.stepper, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+            <Pressable
+              accessibilityLabel="Fewer times"
+              disabled={target <= 1}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setTarget((t) => Math.max(1, t - 1));
+              }}
+              style={[styles.stepBtn, { backgroundColor: colors.surfaceAlt, opacity: target <= 1 ? 0.4 : 1 }]}>
+              <MaterialCommunityIcons name="minus" size={22} color={colors.text} />
+            </Pressable>
+            <View style={{ flex: 1, alignItems: 'center' }}>
+              <AppText variant="title">{target}×</AppText>
+              <AppText variant="caption" muted>
+                {target === 1 ? 'Once a day' : `${target} taps a day`}
+              </AppText>
+            </View>
+            <Pressable
+              accessibilityLabel="More times"
+              disabled={target >= 20}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setTarget((t) => Math.min(20, t + 1));
+              }}
+              style={[styles.stepBtn, { backgroundColor: colors.surfaceAlt }]}>
+              <MaterialCommunityIcons name="plus" size={22} color={colors.text} />
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      {kind === 'todo' && (
+        <View style={{ gap: space.sm }}>
+          <View style={styles.header}>
+            <AppText variant="caption" muted upper>
+              Due date
+            </AppText>
+            {due && (
+              <Button3D
+                title="No date"
+                tone="ghost"
+                small
+                onPress={() => {
+                  setDue(null);
+                  setDueTime(null);
+                }}
+              />
+            )}
+          </View>
+          <CalendarPicker value={due} onChange={setDue} />
+          {due && (
+            <View style={styles.timeRow}>
+              <Pressable
+                accessibilityLabel="Set reminder time"
+                onPress={() => (Platform.OS === 'android' ? pickTime(dueTime, setDueTime) : setShowIosTime((s) => !s))}
+                style={[styles.timeBtn, { borderColor: dueTime ? colors.primary : colors.border, backgroundColor: colors.surface }]}>
+                <MaterialCommunityIcons name="bell-ring-outline" size={20} color={dueTime ? colors.primary : colors.textMuted} />
+                <AppText variant="label" color={dueTime ? colors.primary : colors.textMuted}>
+                  {dueTime ? `Remind me at ${formatClock(dueTime)}` : 'Add time & reminder'}
+                </AppText>
+              </Pressable>
+              {dueTime && (
+                <Pressable accessibilityLabel="Remove time" hitSlop={8} onPress={() => setDueTime(null)}>
+                  <MaterialCommunityIcons name="close-circle" size={24} color={colors.textMuted} />
+                </Pressable>
+              )}
+            </View>
+          )}
+          {due && Platform.OS === 'ios' && showIosTime && (
+            <DateTimePicker
+              mode="time"
+              display="spinner"
+              value={dueTime ? dueAt(due, dueTime) : new Date()}
+              onChange={(_, d) => d && setDueTime(`${pad(d.getHours())}:${pad(d.getMinutes())}`)}
+            />
+          )}
         </View>
       )}
     </Screen>
@@ -192,4 +282,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: space.sm },
   diff: { flex: 1, alignItems: 'center', gap: 2, paddingVertical: space.md, borderRadius: radius.md, borderWidth: 2, borderBottomWidth: 4 },
   day: { flex: 1, aspectRatio: 1, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md, borderRadius: radius.lg, borderWidth: 2 },
+  stepBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  timeRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  timeBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md, borderRadius: radius.md, borderWidth: 2 },
 });

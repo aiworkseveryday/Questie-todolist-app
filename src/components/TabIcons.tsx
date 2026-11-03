@@ -1,6 +1,6 @@
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
-export type TabIconName = 'today' | 'hero' | 'settings';
+export type TabIconName = 'today' | 'hero' | 'shop' | 'settings';
 
 type Props = { name: TabIconName; color: string; focused: boolean; size?: number };
 
@@ -34,6 +34,20 @@ export function TabIcon({ name, color, focused, size = 26 }: Props) {
             strokeLinejoin="round"
           />
           <Path d="M12 7.5 L13.4 10.4 L16.5 10.8 L14.2 13 L14.8 16 L12 14.5 L9.2 16 L9.8 13 L7.5 10.8 L10.6 10.4 Z" fill={detail} />
+        </>
+      )}
+
+      {name === 'shop' && (
+        <>
+          <Path
+            d="M4.5 8.5 H19.5 L18.4 19.2 A2 2 0 0 1 16.4 21 H7.6 A2 2 0 0 1 5.6 19.2 Z"
+            fill={fill}
+            stroke={stroke}
+            strokeWidth={sw}
+            strokeLinejoin="round"
+          />
+          <Path d="M8.5 8.5 V7 A3.5 3.5 0 0 1 15.5 7 V8.5" stroke={color} strokeWidth={sw} strokeLinecap="round" fill="none" />
+          <Path d="M9 13 Q12 16 15 13" stroke={detail} strokeWidth={sw} strokeLinecap="round" fill="none" />
         </>
       )}
 

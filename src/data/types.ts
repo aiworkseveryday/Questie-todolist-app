@@ -10,8 +10,14 @@ export type Item = {
   difficulty: Difficulty;
   /** Weekdays a habit is due on, 0 = Sunday. All seven = daily. */
   days: number[];
+  /** Habit taps needed per day, e.g. 8 for "Drink water". 1 = a plain check-off. */
+  target: number;
   /** Todo due date (YYYY-MM-DD) */
   due: string | null;
+  /** Todo due time (HH:MM, 24h). When set, a reminder fires at that time. */
+  due_time: string | null;
+  /** Scheduled reminder, so it can be cancelled when the todo changes */
+  notif_id: string | null;
   /** When a todo was completed (YYYY-MM-DD) */
   done_on: string | null;
   sort: number;
@@ -44,4 +50,18 @@ export type Profile = {
   last_active_on: string | null;
   freeze_tokens: number;
   onboarded: boolean;
+  /** Food and other consumables: item id → how many you own */
+  inventory: Record<string, number>;
+  /** Day the pet was last fed (YYYY-MM-DD); a fed pet is happy all that day */
+  fed_on: string | null;
+  /** Cosmetics bought in the shop (outfits, hairstyles, pet accessories) */
+  owned: string[];
+  /** Accessory the pet is wearing */
+  pet_accessory: string | null;
+  /** Hero customisation (see game/style.ts) */
+  hair: string;
+  hair_color: string;
+  /** Index into SKIN_TONES */
+  skin: number;
+  outfit: string;
 };

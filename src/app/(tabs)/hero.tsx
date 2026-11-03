@@ -11,7 +11,7 @@ import { ProgressBar } from '@/components/Progress';
 import { Screen } from '@/components/Screen';
 import { loadDailyTotals } from '@/data/db';
 import { useGame } from '@/data/store';
-import { levelFor, petMood, streakStatus } from '@/game/engine';
+import { levelFor, nextPetStage, PET_STAGES, petMood, petStage, streakStatus } from '@/game/engine';
 import { addDays, toISODate } from '@/lib/dates';
 import { useTheme } from '@/theme/ThemeProvider';
 import { palette, radius, space, tint } from '@/theme/tokens';
@@ -75,14 +75,22 @@ export default function HeroScreen() {
 
   const lvl = levelFor(profile.xp);
   const status = streakStatus(profile);
+  const stage = petStage(lvl.level);
+  const next = nextPetStage(lvl.level);
   const max = Math.max(1, ...week.map((d) => d.done));
 
   return (
     <Screen>
       <Card fill={tint(colors.primary, 0.12)} edge={tint(colors.primary, 0.3)} style={styles.stage}>
         <View style={styles.pair}>
-          <Hero gender={profile.gender} look={profile.look} size={130} />
-          <Pet species={profile.pet} mood={petMood(status.state)} size={80} />
+          <Hero style={profile} size={110} />
+          <Pet
+            species={profile.pet}
+            mood={petMood(status.state, profile.fed_on === toISODate(new Date()))}
+            stage={stage}
+            accessory={profile.pet_accessory}
+            size={80}
+          />
         </View>
         <AppText variant="title">{profile.name}</AppText>
         <AppText variant="caption" muted upper>
@@ -131,12 +139,36 @@ export default function HeroScreen() {
         </View>
       </Card>
 
+      <Card style={{ gap: space.md }}>
+        <View style={styles.growthHead}>
+          <AppText variant="heading">{profile.pet_name} is a {PET_STAGES[stage].name}</AppText>
+          <AppText variant="caption" color={colors.primary}>
+            {next ? `${next.name} at Lv ${next.level}` : 'Fully grown!'}
+          </AppText>
+        </View>
+        <View style={styles.growth}>
+          {PET_STAGES.map((st, i) => (
+            <View key={st.name} style={[styles.growthStage, { opacity: i <= stage ? 1 : 0.35 }]}>
+              <View
+                style={[
+                  styles.stageBadge,
+                  { borderColor: i === stage ? colors.primary : 'transparent', backgroundColor: colors.surfaceAlt },
+                ]}>
+                <Pet species={profile.pet} stage={i} size={46} mood={i <= stage ? 'happy' : 'idle'} />
+              </View>
+              <AppText variant="caption" muted={i !== stage} color={i === stage ? colors.primary : undefined} style={{ fontSize: 11 }}>
+                {i <= stage ? st.name : `Lv ${st.level}`}
+              </AppText>
+            </View>
+          ))}
+        </View>
+      </Card>
+
       <AppText variant="caption" muted upper>
         Coming up
       </AppText>
       <Locked title="Choose a class" body="Warrior, Mage or Rogue with habit bonuses" unlock="Lv 10" />
-      <Locked title="Gear shop" body="Spend coins on outfits and pet accessories" unlock="Soon" />
-      <Locked title={`${profile.pet_name} evolves`} body="New forms at 7, 30 and 100 day streaks" unlock="7 🔥" />
+
     </Screen>
   );
 }
@@ -149,6 +181,10 @@ const styles = StyleSheet.create({
   chart: { flexDirection: 'row', gap: space.sm, height: 140 },
   barCol: { flex: 1, alignItems: 'center', gap: space.xs },
   barTrack: { flex: 1, width: '100%', borderRadius: 8, justifyContent: 'flex-end', overflow: 'hidden' },
+  growthHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, flexWrap: 'wrap' },
+  growth: { flexDirection: 'row', justifyContent: 'space-between' },
+  growthStage: { alignItems: 'center', gap: 4, flex: 1 },
+  stageBadge: { borderWidth: 2, borderRadius: radius.md, padding: 2 },
   locked: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
   lockIcon: { width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
 });
