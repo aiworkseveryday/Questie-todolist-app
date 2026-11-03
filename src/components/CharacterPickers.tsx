@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Haptics from 'expo-haptics';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Hero } from '@/characters/Hero';
 import { PETS, Pet } from '@/characters/Pet';
@@ -8,8 +8,6 @@ import type { PetSpecies } from '@/data/types';
 import {
   HAIR_COLORS,
   hairHex,
-  HAIR_STYLES,
-  OUTFITS,
   SKIN_TONES,
   styleKey,
   type HeroStyle,
@@ -18,7 +16,6 @@ import {
 import { useTheme } from '@/theme/ThemeProvider';
 import { radius, space, tint } from '@/theme/tokens';
 import { AppText } from './AppText';
-import { Chip, ChipRow } from './Chip';
 
 function Tile({
   selected,
@@ -81,7 +78,12 @@ type CustomizerProps = {
   onPick: (kind: Kind, option: StyleOption) => void;
 };
 
-/** Full hero editor: body, skin, hairstyle, hair colour and outfit, with live previews. */
+const HEROES: { gender: HeroStyle['gender']; name: string }[] = [
+  { gender: 'female', name: 'Aurora' },
+  { gender: 'male', name: 'Kael' },
+];
+
+/** Hero editor: pick Aurora or Kael, then their skin tone and hair colour. */
 export function HeroCustomizer({ value, owned, onGender, onSkin, onPick }: CustomizerProps) {
   const { colors } = useTheme();
   const locked = (kind: Kind, o: StyleOption) => (o.price > 0 && !(owned ?? []).includes(styleKey(kind, o.id)) ? o.price : 0);
@@ -100,11 +102,14 @@ export function HeroCustomizer({ value, owned, onGender, onSkin, onPick }: Custo
 
   return (
     <View style={{ gap: space.md }}>
-      {label('Body')}
-      <ChipRow>
-        <Chip label="Male" selected={value.gender === 'male'} onPress={() => onGender('male')} />
-        <Chip label="Female" selected={value.gender === 'female'} onPress={() => onGender('female')} />
-      </ChipRow>
+      {label('Choose your hero')}
+      <View style={styles.row}>
+        {HEROES.map((h) => (
+          <Tile key={h.gender} label={h.name} selected={value.gender === h.gender} onPress={() => onGender(h.gender)}>
+            <Hero style={{ ...value, gender: h.gender }} size={56} bounce={value.gender === h.gender} />
+          </Tile>
+        ))}
+      </View>
 
       {label('Skin tone')}
       <View style={styles.swatches}>
@@ -121,18 +126,6 @@ export function HeroCustomizer({ value, owned, onGender, onSkin, onPick }: Custo
           />
         ))}
       </View>
-
-      {label('Hairstyle')}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.strip}>
-        {options('hair', HAIR_STYLES).map((h) => (
-          <Tile key={h.id} width={92} label={h.name} price={locked('hair', h)} selected={value.hair === h.id} onPress={() => pick('hair', h)}>
-            {/* Head-and-shoulders crop of the hero wearing this style */}
-            <View style={styles.headCrop}>
-              <Hero style={{ ...value, hair: h.id }} size={84} bounce={false} />
-            </View>
-          </Tile>
-        ))}
-      </ScrollView>
 
       {label('Hair colour')}
       <View style={styles.swatches}>
@@ -157,14 +150,6 @@ export function HeroCustomizer({ value, owned, onGender, onSkin, onPick }: Custo
         })}
       </View>
 
-      {label('Outfit')}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.strip}>
-        {options('outfit', OUTFITS).map((o) => (
-          <Tile key={o.id} width={104} label={o.name} price={locked('outfit', o)} selected={value.outfit === o.id} onPress={() => pick('outfit', o)}>
-            <Hero style={{ ...value, outfit: o.id }} size={60} bounce={false} />
-          </Tile>
-        ))}
-      </ScrollView>
     </View>
   );
 }
@@ -183,7 +168,6 @@ export function PetPicker({ pet, onChange, stage = 1 }: { pet: PetSpecies; onCha
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: space.sm },
-  strip: { gap: space.sm, paddingRight: space.sm },
   tile: {
     alignItems: 'center',
     gap: space.xs,
@@ -193,7 +177,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderBottomWidth: 4,
   },
-  headCrop: { width: 84, height: 66, overflow: 'hidden', alignItems: 'center' },
   swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   swatch: { width: 40, height: 40, borderRadius: 20, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
   price: {

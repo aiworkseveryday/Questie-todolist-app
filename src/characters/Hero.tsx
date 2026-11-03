@@ -1,373 +1,261 @@
 import { useEffect } from 'react';
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
-import Svg, { Circle, Defs, Ellipse, G, Path, Rect } from 'react-native-svg';
+import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Path, Stop } from 'react-native-svg';
 
 import { hairHex, SKIN_TONES, type HeroStyle } from '@/game/style';
-import { Ball, darken, Drop, Glow, lighten, OUTLINE, useGradientIds } from './paint';
+import { darken, lighten, useGradientIds } from './paint';
 
-const INK = '#2A1F3D';
+/** Anime-style line art: a dark ink outline on every shape. */
+const LINE = { stroke: '#2A2238', strokeWidth: 1.4, strokeLinejoin: 'round' as const, strokeLinecap: 'round' as const };
+const INK = '#2A2238';
 
-/** A sleeve or limb drawn as a thick rounded stroke with a soft outline. */
-function Limb({ d, color, width }: { d: string; color: string; width: number }) {
-  return (
-    <G>
-      <Path d={d} stroke={INK} strokeOpacity={0.22} strokeWidth={width + 2.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-      <Path d={d} stroke={color} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-    </G>
-  );
-}
+/** Height of the drawing relative to its width (viewBox 200 × 440). */
+export const HERO_ASPECT = 2.2;
 
-/** Colours for each outfit: main garment, trim/lining, pants, shoes and glow accents. */
-const OUTFIT_COLORS: Record<string, { main: string; trim: string; pants: string; shoe: string; accent: string }> = {
-  bomber: { main: '#4E7A55', trim: '#F08A3C', pants: '#2F3550', shoe: '#F2F2F5', accent: '#F08A3C' },
-  hoodie: { main: '#7C5CFF', trim: '#B9A6FF', pants: '#33395A', shoe: '#FFFFFF', accent: '#FFC233' },
-  tactical: { main: '#3A4656', trim: '#6B7A45', pants: '#2C333D', shoe: '#3B2E25', accent: '#FFC233' },
-  street: { main: '#1F1B2E', trim: '#FF4FD8', pants: '#2A2540', shoe: '#FFFFFF', accent: '#3BE8FF' },
-  ranger: { main: '#C9A26B', trim: '#7A4E2D', pants: '#5B4636', shoe: '#5A3B28', accent: '#E8572E' },
-  armor: { main: '#E6EAF4', trim: '#8C97B0', pants: '#3A4258', shoe: '#E6EAF4', accent: '#3BD5FF' },
-};
-
+type Ids = Record<'silver' | 'irisF' | 'irisM', { id: string; url: string }>;
 type Props = { style: HeroStyle; size?: number; bounce?: boolean };
 
-function Eyes({ female, iris }: { female: boolean; iris: string }) {
+/** Big glossy anime eye; `cx` is its centre, the outer corner gets a lash flick. */
+function Eye({ cx, iris, female }: { cx: number; iris: string; female: boolean }) {
+  const out = cx < 100 ? -1 : 1;
+  const y = 51;
   return (
     <G>
-      {[50, 70].map((cx) => {
-        const out = cx < 60 ? -1 : 1;
-        return (
-          <G key={cx}>
-            {/* almond eye white */}
-            <Path d={`M${cx - 5.5} 41 Q${cx} 35.5 ${cx + 5.5} 41 Q${cx} 45.5 ${cx - 5.5} 41 Z`} fill="#FFFFFF" />
-            <Circle cx={cx} cy={40.8} r={3.4} fill={iris} />
-            <Circle cx={cx} cy={40.8} r={1.6} fill="#0E0818" />
-            <Circle cx={cx + 1.2} cy={39.6} r={1} fill="#FFFFFF" />
-            {/* upper lid line, with a flick for lashes */}
-            <Path
-              d={female ? `M${cx - 6} 40.5 Q${cx} 34.5 ${cx + 6} 40 L${cx + 7.5 * out} 38` : `M${cx - 6} 40.5 Q${cx} 35 ${cx + 6} 40.5`}
-              stroke={INK}
-              strokeWidth={1.6}
-              strokeLinecap="round"
-              fill="none"
-            />
-          </G>
-        );
-      })}
+      <Path d={`M${cx - 6} ${y} Q${cx} ${y - 6} ${cx + 6} ${y - 1} Q${cx} ${y + 5} ${cx - 6} ${y} Z`} fill="#FFFFFF" />
+      <Ellipse cx={cx + 0.4} cy={y} rx={3.3} ry={female ? 4.4 : 3.8} fill={iris} />
+      <Ellipse cx={cx + 0.4} cy={y + 0.4} rx={1.4} ry={female ? 2.2 : 1.9} fill="#120C1E" />
+      <Circle cx={cx + 1.5} cy={y - 1.8} r={1.25} fill="#FFFFFF" />
+      <Circle cx={cx - 0.9} cy={y + 2} r={0.6} fill="#FFFFFF" />
+      <Path d={`M${cx - 6.5} ${y - 0.5} Q${cx} ${y - 7} ${cx + 6.5} ${y - 1.5}`} stroke={INK} strokeWidth={female ? 2.3 : 2} strokeLinecap="round" fill="none" />
+      {female && <Path d={`M${cx + 6.5 * out} ${y - 1} L${cx + 8.4 * out} ${y - 2.6}`} stroke={INK} strokeWidth={1.6} strokeLinecap="round" />}
+      <Path d={`M${cx - 4} ${y + 4.2} Q${cx} ${y + 5.2} ${cx + 4} ${y + 3.8}`} stroke={INK} strokeOpacity={0.45} strokeWidth={0.8} fill="none" />
     </G>
   );
 }
 
-/** Hair drawn behind the head and body (long hair, tails, braids, hoods). */
-function BackHair({ hair, fill }: { hair: string; fill: string }) {
-  if (hair === 'long')
-    return <Path d="M38 34 C36 12 84 12 82 34 L86 92 Q74 100 66 90 L60 70 L54 90 Q46 100 34 92 Z" fill={fill} {...OUTLINE} />;
-  if (hair === 'ponytail')
-    return (
-      <G>
-        <Path d="M76 26 Q96 30 92 60 Q90 82 82 96 Q80 74 80 58 Q80 40 72 32 Z" fill={fill} {...OUTLINE} />
-      </G>
-    );
-  if (hair === 'braid')
-    return (
-      <G>
-        {[48, 58, 68, 78, 88, 98].map((y, i) => (
-          <Ellipse key={y} cx={76 + i * 1.2} cy={y} rx={6 - i * 0.4} ry={6} fill={fill} {...OUTLINE} />
-        ))}
-        <Circle cx={83} cy={105} r={2.5} fill="#FF5FB8" />
-      </G>
-    );
-  return null;
+/** Aurora: an original knight in navy, white and gold with silver plate armour. */
+function Aurora({ skin, hair, ids }: { skin: string; hair: string; ids: Ids }) {
+  const navy = '#22356B';
+  const navyShade = darken(navy, 0.3);
+  const white = '#F5F3FA';
+  const whiteShade = '#D6D2E4';
+  const gold = '#E2B23E';
+  const silver = ids.silver.url;
+  const teal = '#2EC4B6';
+  const skinShade = darken(skin, 0.14);
+  const hairShade = darken(hair, 0.28);
+
+  return (
+    <G>
+      {/* long white back panels flowing behind the legs */}
+      <Path d="M72 150 Q60 262 50 384 Q68 374 82 390 Q88 300 92 182 Z" fill={white} {...LINE} />
+      <Path d="M128 150 Q140 262 150 384 Q132 374 118 390 Q112 300 108 182 Z" fill={whiteShade} {...LINE} />
+      <Path d="M72 150 Q60 262 50 384 M128 150 Q140 262 150 384" stroke={gold} strokeWidth={2} fill="none" />
+
+      {/* hair behind the head: a jaw-length bob */}
+      <Path d="M70 44 Q66 10 100 8 Q134 10 130 44 L132 84 Q122 92 114 82 L112 56 L88 56 L86 82 Q78 92 68 84 Z" fill={hairShade} {...LINE} />
+
+      {/* armoured legs with shield knee guards */}
+      <Path d="M84 230 L98 230 L97 302 L96 400 L100 420 L74 420 Q72 412 80 404 L82 302 Z" fill={silver} {...LINE} />
+      <Path d="M102 230 L116 230 L118 302 L120 400 L126 420 L100 420 L104 400 L103 302 Z" fill={silver} {...LINE} />
+      <Path d="M92 236 L91 398 M111 236 L113 398" stroke="#FFFFFF" strokeOpacity={0.6} strokeWidth={1.6} />
+      {[90, 110].map((x) => (
+        <G key={x}>
+          <Path d={`M${x - 9} 296 L${x + 9} 296 L${x + 9} 311 L${x} 320 L${x - 9} 311 Z`} fill={navy} {...LINE} />
+          <Path d={`M${x - 7} 298 L${x + 7} 298 L${x + 7} 310 L${x} 317 L${x - 7} 310 Z`} stroke={gold} strokeWidth={1.2} fill="none" />
+          <Circle cx={x} cy={306} r={2.6} fill={teal} stroke={INK} strokeWidth={0.8} />
+        </G>
+      ))}
+
+      {/* split skirt over a white underlayer */}
+      <Path d="M96 170 L104 170 L103 252 L97 252 Z" fill={white} {...LINE} />
+      <Path d="M74 170 L98 172 L96 246 L70 236 Q70 200 74 170 Z" fill={navy} {...LINE} />
+      <Path d="M126 170 L102 172 L104 246 L130 236 Q130 200 126 170 Z" fill={navyShade} {...LINE} />
+      <Path d="M70 236 L96 246 M130 236 L104 246" stroke={gold} strokeWidth={2.2} />
+
+      {/* arms: navy sleeves, silver gauntlets */}
+      <Path d="M70 98 Q60 100 58 120 L56 160 L68 162 L72 124 Z" fill={navy} {...LINE} />
+      <Path d="M130 98 Q140 100 142 120 L144 160 L132 162 L128 124 Z" fill={navyShade} {...LINE} />
+      <Path d="M55 158 L69 160 L67 206 L53 206 Z" fill={silver} {...LINE} />
+      <Path d="M145 158 L131 160 L133 206 L147 206 Z" fill={silver} {...LINE} />
+      <Path d="M55 172 L68 173 M145 172 L132 173" stroke={gold} strokeWidth={1.6} />
+      <Path d="M53 206 Q50 220 57 227 Q66 227 67 214 L67 206 Z" fill={skin} {...LINE} />
+      <Path d="M147 206 Q150 220 143 227 Q134 227 133 214 L133 206 Z" fill={skinShade} {...LINE} />
+
+      {/* fitted tunic: navy with a white centre panel and gold clasps */}
+      <Path d="M70 96 Q100 88 130 96 L126 132 Q120 150 118 170 L82 170 Q80 150 74 132 Z" fill={navy} {...LINE} />
+      <Path d="M112 96 L130 96 L126 132 Q120 150 118 170 L108 170 Z" fill={navyShade} />
+      <Path d="M93 92 L107 92 L105 170 L95 170 Z" fill={white} {...LINE} />
+      <Path d="M93 92 L95 170 M107 92 L105 170" stroke={gold} strokeWidth={1.6} />
+      {[112, 128, 144].map((y) => (
+        <G key={y}>
+          <Path d={`M86 ${y} H114`} stroke={INK} strokeWidth={3.4} strokeLinecap="round" />
+          <Path d={`M88 ${y} H112`} stroke={gold} strokeWidth={1.6} strokeLinecap="round" />
+        </G>
+      ))}
+      <Path d="M80 160 H120 V170 H80 Z" fill={INK} {...LINE} />
+      <Path d="M94 159 H106 V171 H94 Z" fill={gold} {...LINE} />
+      <Circle cx={100} cy={165} r={2.4} fill={teal} />
+
+      {/* silver shoulder plates with gold edging and teal gems */}
+      {[
+        { a: 'M57 96 Q63 83 80 88 L82 104 Q70 112 57 110 Z', b: 'M55 108 Q66 114 79 106 L77 117 Q66 123 55 119 Z', gem: 70 },
+        { a: 'M143 96 Q137 83 120 88 L118 104 Q130 112 143 110 Z', b: 'M145 108 Q134 114 121 106 L123 117 Q134 123 145 119 Z', gem: 130 },
+      ].map((p) => (
+        <G key={p.gem}>
+          <Path d={p.b} fill={silver} {...LINE} />
+          <Path d={p.a} fill={silver} {...LINE} />
+          <Path d={p.a} stroke={gold} strokeWidth={1.1} fill="none" />
+          <Circle cx={p.gem} cy={97} r={2.6} fill={teal} stroke={INK} strokeWidth={0.8} />
+        </G>
+      ))}
+
+      {/* neck and high collar */}
+      <Path d="M95 72 L105 72 L106 90 L94 90 Z" fill={skin} {...LINE} />
+      <Path d="M95 74 Q100 81 105 74 L105 82 Q100 85 95 81 Z" fill={skinShade} />
+      <Path d="M87 84 L113 84 L115 97 Q100 101 85 97 Z" fill={white} {...LINE} />
+      <Path d="M87 84 L113 84" stroke={gold} strokeWidth={1.6} />
+
+      {/* face */}
+      <Path d="M80 44 Q80 22 100 20 Q120 22 120 44 Q120 62 108 74 Q100 79 92 74 Q80 62 80 44 Z" fill={skin} {...LINE} />
+      <Path d="M114 52 Q114 64 106 72 Q113 66 117 52 Z" fill={skinShade} />
+
+      {/* front hair: jagged fringe and face-framing locks */}
+      <Path d="M80 40 Q75 60 82 82 L87 79 Q82 60 86 44 Z" fill={hair} {...LINE} />
+      <Path d="M120 40 Q125 60 118 82 L113 79 Q118 60 114 44 Z" fill={hairShade} {...LINE} />
+      <Path d="M78 50 Q74 15 100 13 Q126 15 122 50 L118 37 L114 49 L108 31 L102 45 L96 29 L90 45 L86 34 L82 50 Z" fill={hair} {...LINE} />
+      <Path d="M86 24 Q100 17 114 23" stroke={lighten(hair, 0.6)} strokeOpacity={0.8} strokeWidth={2.2} strokeLinecap="round" fill="none" />
+
+      {/* features */}
+      <Path d="M85 42 Q90 40 96 41.5 M104 41.5 Q110 40 115 42" stroke={darken(hair, 0.45)} strokeWidth={1.3} strokeLinecap="round" fill="none" />
+      <Eye cx={91} iris={ids.irisF.url} female />
+      <Eye cx={109} iris={ids.irisF.url} female />
+      <Path d="M100.5 57 L99.5 60" stroke={darken(skin, 0.35)} strokeWidth={1} strokeLinecap="round" />
+      <Path d="M97.5 66 Q100 67.4 102.5 66" stroke="#9A3E52" strokeWidth={1.2} strokeLinecap="round" fill="none" />
+      <Ellipse cx={87} cy={60} rx={3.5} ry={1.6} fill="#FF7FA8" opacity={0.3} />
+      <Ellipse cx={113} cy={60} rx={3.5} ry={1.6} fill="#FF7FA8" opacity={0.3} />
+    </G>
+  );
 }
 
-/** Hair drawn over the head. */
-function FrontHair({ hair, fill, shine }: { hair: string; fill: string; shine: string }) {
-  const gloss = <Path d="M47 24 Q58 19 71 22" stroke={shine} strokeOpacity={0.45} strokeWidth={3} strokeLinecap="round" fill="none" />;
-  switch (hair) {
-    case 'undercut':
-      return (
-        <G>
-          <Path d="M39 40 C38 26 44 20 50 18 L48 30 Q42 32 40 40 Z M81 40 C82 26 76 20 70 18 L72 30 Q78 32 80 40 Z" fill={fill} opacity={0.45} />
-          <Path d="M42 30 C42 10 80 6 84 26 C76 20 66 21 58 26 C52 23 46 26 42 30 Z" fill={fill} {...OUTLINE} />
-          {gloss}
-        </G>
-      );
-    case 'spiky':
-      return (
-        <G>
-          <Path
-            d="M38 40 L35 25 L44 28 L41 15 L52 21 L55 8 L62 19 L71 10 L72 22 L83 17 L80 29 L85 33 L82 40 C78 30 70 26 60 27 C50 26 42 31 38 40 Z"
-            fill={fill}
-            {...OUTLINE}
-          />
-          {gloss}
-        </G>
-      );
-    case 'long':
-      return (
-        <G>
-          <Path d="M38 44 C33 10 87 10 82 44 C80 33 72 25 62 25 C57 31 47 33 40 33 Z" fill={fill} {...OUTLINE} />
-          <Path d="M39 38 Q36 60 41 78 L46 76 Q42 60 44 40 Z M81 38 Q84 60 79 78 L74 76 Q78 60 76 40 Z" fill={fill} {...OUTLINE} />
-          {gloss}
-        </G>
-      );
-    case 'ponytail':
-      return (
-        <G>
-          <Path d="M39 40 C36 12 84 12 81 40 C78 30 70 24 60 25 C50 24 42 30 39 40 Z" fill={fill} {...OUTLINE} />
-          <Rect x="74" y="26" width="6" height="7" rx="2" fill="#FF5FB8" transform="rotate(25 77 29)" />
-          {gloss}
-        </G>
-      );
-    case 'buns':
-      return (
-        <G>
-          <Circle cx="43" cy="20" r="9" fill={fill} {...OUTLINE} />
-          <Circle cx="77" cy="20" r="9" fill={fill} {...OUTLINE} />
-          <Path d="M39 40 C36 12 84 12 81 40 C77 31 70 27 62 30 C55 26 45 30 39 40 Z" fill={fill} {...OUTLINE} />
-          {gloss}
-        </G>
-      );
-    case 'mohawk':
-      return (
-        <G>
-          <Path d="M40 38 C39 24 46 19 52 18 L52 28 Q44 30 41 38 Z M80 38 C81 24 74 19 68 18 L68 28 Q76 30 79 38 Z" fill={fill} opacity={0.4} />
-          <Path d="M53 30 L50 6 L57 11 L60 2 L64 11 L71 6 L67 30 Q60 27 53 30 Z" fill={fill} {...OUTLINE} />
-        </G>
-      );
-    case 'braid':
-      return (
-        <G>
-          <Path d="M38 42 C34 12 86 12 82 40 C78 32 72 28 66 30 C58 24 46 28 38 42 Z" fill={fill} {...OUTLINE} />
-          {gloss}
-        </G>
-      );
-    default: // crop
-      return (
-        <G>
-          <Path d="M39 40 C37 12 83 12 81 40 C79 31 71 26 60 26.5 C49 26 41 31 39 40 Z" fill={fill} {...OUTLINE} />
-          {gloss}
-        </G>
-      );
-  }
+/** Kael: an original wanderer in a long rune-lit coat with a torn hem. */
+function Kael({ skin, hair, ids }: { skin: string; hair: string; ids: Ids }) {
+  const coat = '#34323F';
+  const coatShade = darken(coat, 0.35);
+  const lining = '#4A4658';
+  const pants = '#3A3F55';
+  const rune = '#3BE0D0';
+  const skinShade = darken(skin, 0.14);
+  const hairShade = darken(hair, 0.3);
+
+  return (
+    <G>
+      {/* coat tails behind the legs, hem torn into ragged points */}
+      <Path d="M66 150 Q58 262 44 352 L54 346 L57 358 L67 342 L74 354 L80 334 L84 300 L90 200 Z" fill={coat} {...LINE} />
+      <Path d="M134 150 Q142 262 156 358 L146 350 L141 362 L131 344 L125 354 L120 332 L116 300 L110 200 Z" fill={coatShade} {...LINE} />
+
+      {/* back hair */}
+      <Path d="M76 48 Q68 10 100 6 Q134 8 126 48 Z" fill={hairShade} {...LINE} />
+
+      {/* slim pants and boots */}
+      <Path d="M84 196 L99 196 L96 300 L94 396 L82 396 L82 300 Z" fill={pants} {...LINE} />
+      <Path d="M101 196 L116 196 L121 300 L122 396 L109 396 L104 300 Z" fill={darken(pants, 0.25)} {...LINE} />
+      <Path d="M86 300 Q90 304 95 300 M106 300 Q112 304 118 300" stroke={INK} strokeOpacity={0.4} strokeWidth={1} fill="none" />
+      <Path d="M80 390 L97 390 L99 420 L70 420 Q69 410 80 403 Z" fill="#1E1C24" {...LINE} />
+      <Path d="M107 390 L124 390 L132 403 Q134 412 131 420 L105 420 Z" fill="#1E1C24" {...LINE} />
+      <Path d="M76 410 L96 410 M108 410 L128 410" stroke="#FFFFFF" strokeOpacity={0.25} strokeWidth={1.4} />
+
+      {/* sleeves, a bracer and clenched fists */}
+      <Path d="M66 100 Q55 104 53 126 L51 196 L66 198 L70 130 Z" fill={coat} {...LINE} />
+      <Path d="M134 100 Q145 104 147 126 L149 196 L134 198 L130 130 Z" fill={coatShade} {...LINE} />
+      <Path d="M51 190 L66 192 M149 190 L134 192" stroke={rune} strokeWidth={1.6} />
+      <Path d="M133 166 L149 166 L149 190 L133 190 Z" fill="#26242E" {...LINE} />
+      <Path d="M136 172 L146 172 M136 184 L146 184" stroke={rune} strokeWidth={1.2} />
+      <Path d="M51 196 Q48 212 57 217 Q66 215 66 204 L66 198 Z" fill={skin} {...LINE} />
+      <Path d="M149 196 Q152 212 143 217 Q134 215 134 204 L134 198 Z" fill={skinShade} {...LINE} />
+
+      {/* dark shirt with an open neck */}
+      <Path d="M74 100 Q100 94 126 100 L120 196 L80 196 Z" fill="#1D1C26" {...LINE} />
+      <Path d="M94 96 L100 112 L106 96 Z" fill={skinShade} {...LINE} />
+
+      {/* belt with a silver buckle and a hanging chain */}
+      <Path d="M80 184 L120 184 L120 194 L80 194 Z" fill="#5A3A28" {...LINE} />
+      <Path d="M95 182 L105 182 L105 196 L95 196 Z" fill="#C9D0DC" {...LINE} />
+      <Path d="M110 194 Q118 214 106 222 Q98 214 96 196" stroke="#AEB6C4" strokeWidth={1.6} strokeDasharray="2 1.6" fill="none" />
+
+      {/* open coat front with lapels and glowing rune lines */}
+      <Path d="M66 98 L92 98 L86 196 L82 196 Q78 260 74 300 L67 296 Q63 220 66 150 Z" fill={coat} {...LINE} />
+      <Path d="M134 98 L108 98 L114 196 L118 196 Q122 260 126 300 L133 296 Q137 220 134 150 Z" fill={coatShade} {...LINE} />
+      <Path d="M92 98 L82 138 L75 112 Z" fill={lining} {...LINE} />
+      <Path d="M108 98 L118 138 L125 112 Z" fill={darken(lining, 0.25)} {...LINE} />
+      <Path d="M72 122 L80 122 L76 142 L84 152 L80 190 L78 250" stroke={rune} strokeWidth={1.6} fill="none" />
+      <Path d="M128 122 L121 130 L126 150 L118 162 L122 192 L124 250" stroke={rune} strokeWidth={1.6} fill="none" />
+      {/* dark armoured plate on one shoulder */}
+      <Path d="M124 94 Q142 88 150 106 Q141 117 127 112 Z" fill="#26242E" {...LINE} />
+      <Path d="M128 98 Q141 95 146 106" stroke={rune} strokeWidth={1.2} fill="none" />
+
+      {/* neck and standing collar */}
+      <Path d="M95 74 L105 74 L106 98 L94 98 Z" fill={skin} {...LINE} />
+      <Path d="M95 76 Q100 83 105 76 L105 84 Q100 88 95 84 Z" fill={skinShade} />
+      <Path d="M83 92 Q100 85 117 92 L119 101 Q100 96 81 101 Z" fill={lining} {...LINE} />
+
+      {/* face with a sharper jaw */}
+      <Ellipse cx={80.5} cy={50} rx={3} ry={6} fill={skin} {...LINE} />
+      <Ellipse cx={119.5} cy={50} rx={3} ry={6} fill={skinShade} {...LINE} />
+      <Path d="M81 44 Q81 22 100 20 Q119 22 119 44 Q119 60 110 72 Q100 80 90 72 Q81 60 81 44 Z" fill={skin} {...LINE} />
+      <Path d="M114 50 Q114 64 106 73 Q113 67 117 50 Z" fill={skinShade} />
+
+      {/* messy fringe swept to one side */}
+      <Path d="M78 48 Q72 13 102 9 Q130 11 124 44 L118 33 L116 46 L110 29 L104 44 L98 27 L92 42 L86 30 L82 45 Z" fill={hair} {...LINE} />
+      <Path d="M88 20 Q100 13 114 18" stroke={lighten(hair, 0.55)} strokeOpacity={0.7} strokeWidth={2} strokeLinecap="round" fill="none" />
+
+      {/* features: level brows, focused eyes */}
+      <Path d="M84 43.5 L96 45 M104 45 L116 43.5" stroke={darken(hair, 0.4)} strokeWidth={2} strokeLinecap="round" />
+      <Eye cx={91} iris={ids.irisM.url} female={false} />
+      <Eye cx={109} iris={ids.irisM.url} female={false} />
+      <Path d="M100.5 56 L98.8 61 L101.2 61.6" stroke={darken(skin, 0.35)} strokeWidth={1} strokeLinecap="round" fill="none" />
+      <Path d="M97 67 Q100 67.8 103.5 66.4" stroke="#7A3A44" strokeWidth={1.2} strokeLinecap="round" fill="none" />
+    </G>
+  );
 }
 
 /**
- * Original battle-royale style hero: athletic proportions, layered outfits and gear.
- * Hairstyle, hair colour, skin tone and outfit all mix and match.
+ * Anime-style hero: Aurora the knight (female) or Kael the wanderer (male).
+ * Skin tone and hair colour follow the player's choices.
  */
-export function Hero({ style, size = 120, bounce = true }: Props) {
+export function Hero({ style, size = 100, bounce = true }: Props) {
   const y = useSharedValue(0);
   useEffect(() => {
     if (!bounce) return;
-    y.value = withRepeat(withSequence(withTiming(-3, { duration: 1100 }), withTiming(0, { duration: 1100 })), -1);
+    y.value = withRepeat(withSequence(withTiming(-3, { duration: 1200 }), withTiming(0, { duration: 1200 })), -1);
   }, [bounce, y]);
   const anim = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }] }));
 
-  const female = style.gender === 'female';
   const skin = SKIN_TONES[style.skin] ?? SKIN_TONES[1];
   const hair = hairHex(style.hair_color);
-  const o = OUTFIT_COLORS[style.outfit] ?? OUTFIT_COLORS.bomber;
-  const outfit = style.outfit;
   const g = useGradientIds();
-  const ids = {
-    skin: g('skin'),
-    limb: g('limb'),
-    hair: g('hair'),
-    main: g('main'),
-    trim: g('trim'),
-    pants: g('pants'),
-    shoe: g('shoe'),
-    glow: g('glow'),
-    shadow: g('shadow'),
-    blush: g('blush'),
-  };
-  // Narrower shoulders and a waist for female builds
-  const torso = female
-    ? 'M42 66 Q60 61 78 66 L80 82 Q76 92 78 104 L82 118 Q60 124 38 118 L42 104 Q44 92 40 82 Z'
-    : 'M34 67 Q60 59 86 67 L84 90 L82 118 Q60 124 38 118 L36 90 Z';
-  const shoulder = female ? 41 : 35;
-  const rs = 120 - shoulder;
-  const iris = darken(hair === '#D5DAE6' ? '#7A55E8' : hair, 0.1);
-  const gloves = outfit === 'tactical' || outfit === 'street';
+  const ids: Ids = { silver: g('silver'), irisF: g('irisF'), irisM: g('irisM') };
 
   return (
     <Animated.View style={anim}>
-      <Svg width={size} height={size * (200 / 120)} viewBox="0 0 120 200">
+      <Svg width={size} height={size * HERO_ASPECT} viewBox="0 0 200 440">
         <Defs>
-          <Ball id={ids.skin.id} color={skin} />
-          <Drop id={ids.limb.id} color={skin} from={0.1} to={0.15} />
-          <Drop id={ids.hair.id} color={hair} from={0.3} to={0.35} />
-          <Ball id={ids.main.id} color={o.main} />
-          <Drop id={ids.trim.id} color={o.trim} from={0.25} to={0.25} />
-          <Drop id={ids.pants.id} color={o.pants} from={0.15} to={0.3} />
-          <Drop id={ids.shoe.id} color={o.shoe} from={0.2} to={0.25} />
-          <Glow id={ids.glow.id} color={o.accent} opacity={0.9} />
-          <Glow id={ids.shadow.id} color="#1A1028" opacity={0.35} />
-          <Glow id={ids.blush.id} color="#FF6FA8" opacity={0.4} />
+          <LinearGradient id={ids.silver.id} x1="0" y1="0" x2="1" y2="0">
+            <Stop offset="0" stopColor="#F2F4F8" />
+            <Stop offset="0.5" stopColor="#C9CFDC" />
+            <Stop offset="1" stopColor="#8E97AB" />
+          </LinearGradient>
+          <LinearGradient id={ids.irisF.id} x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor="#0E2A3A" />
+            <Stop offset="1" stopColor="#3FD2C4" />
+          </LinearGradient>
+          <LinearGradient id={ids.irisM.id} x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor="#3A1E0E" />
+            <Stop offset="1" stopColor="#F0B040" />
+          </LinearGradient>
         </Defs>
-
-        <Ellipse cx="60" cy="194" rx="34" ry="5" fill={ids.shadow.url} />
-
-        {/* behind the body: long hair, hood, ranger coat tails */}
-        <BackHair hair={style.hair} fill={ids.hair.url} />
-        {outfit === 'hoodie' && <Path d="M40 62 Q36 46 46 44 L74 44 Q84 46 80 62 Z" fill={darken(o.main, 0.2)} {...OUTLINE} />}
-        {outfit === 'ranger' && <Path d="M38 100 L32 156 L50 150 L60 120 L70 150 L88 156 L82 100 Z" fill={ids.main.url} {...OUTLINE} />}
-
-        {/* legs and shoes, slight heroic stance */}
-        <Path d="M44 114 L59 114 L54 178 L41 178 Q40 146 44 114 Z" fill={ids.pants.url} {...OUTLINE} />
-        <Path d="M61 114 L76 114 Q80 146 79 178 L66 178 Z" fill={ids.pants.url} {...OUTLINE} />
-        {(outfit === 'tactical' || outfit === 'ranger') && (
-          <G>
-            <Rect x="44" y="140" width="10" height="9" rx="2" fill={darken(o.pants, 0.25)} />
-            <Rect x="66" y="140" width="10" height="9" rx="2" fill={darken(o.pants, 0.25)} />
-          </G>
-        )}
-        {outfit === 'street' && <Path d="M47 120 L43 176 M73 120 L77 176" stroke={o.trim} strokeWidth={1.6} />}
-        <Path d="M37 177 Q37 172 43 172 L55 172 L56 186 L34 186 Q33 179 37 177 Z" fill={ids.shoe.url} {...OUTLINE} />
-        <Path d="M65 172 L77 172 Q83 172 83 177 Q87 179 86 186 L64 186 Z" fill={ids.shoe.url} {...OUTLINE} />
-        <Path d="M34 183 H56 M64 183 H86" stroke={darken(o.shoe, 0.35)} strokeWidth={2.5} />
-        <Path d="M41 177 L49 176 M71 176 L79 177" stroke={o.accent} strokeWidth={2} strokeLinecap="round" />
-
-        {/* neck */}
-        <Rect x="54" y="54" width="12" height="14" rx="4" fill={darken(skin, 0.12)} />
-
-        {/* arms: left hangs relaxed, right hand rests on the hip */}
-        <Limb d={`M${shoulder + 1} 72 Q${shoulder - 8} 96 ${shoulder - 7} 119`} color={ids.main.url} width={11} />
-        <Limb d={`M${rs - 1} 72 Q${rs + 12} 86 ${rs + 9} 97 Q${rs + 4} 104 ${rs - 4} 106`} color={ids.main.url} width={11} />
-        <Circle cx={shoulder - 7} cy="121" r="6" fill={ids.trim.url} />
-        <Circle cx={shoulder - 7} cy="126" r="6" fill={gloves ? '#2A2533' : ids.skin.url} {...OUTLINE} />
-        {outfit === 'street' && (
-          <G>
-            <Path d={`M${shoulder + 1} 72 Q${shoulder - 8} 96 ${shoulder - 7} 116`} stroke={o.trim} strokeWidth={1.8} fill="none" />
-            <Path d={`M${rs - 1} 72 Q${rs + 12} 86 ${rs + 9} 97`} stroke={o.trim} strokeWidth={1.8} fill="none" />
-            <Rect x={shoulder - 11} y="112" width="8" height="5" rx="1.5" fill={o.accent} />
-          </G>
-        )}
-
-        {/* torso */}
-        <Path d={torso} fill={ids.main.url} {...OUTLINE} />
-
-        {outfit === 'bomber' && (
-          <G>
-            {/* open jacket over a tee, ribbed collar and hem, orange lining */}
-            <Path d="M52 66 L60 74 L68 66 L66 118 L54 118 Z" fill="#EDEFF5" {...OUTLINE} />
-            <Path d="M52 66 L54 118 M68 66 L66 118" stroke={o.trim} strokeWidth={2.5} />
-            <Path d="M48 64 Q60 70 72 64 L70 70 Q60 75 50 70 Z" fill={ids.trim.url} {...OUTLINE} />
-            <Rect x="36" y="112" width="48" height="7" rx="2" fill={darken(o.main, 0.25)} />
-            <Rect x={female ? 69 : 71} y="78" width="8" height="8" rx="1.5" fill={o.trim} />
-            {/* headphones resting on the neck */}
-            <Path d="M46 62 Q60 74 74 62" stroke="#2A2533" strokeWidth={3} fill="none" />
-            <Ellipse cx="45" cy="62" rx="4" ry="5.5" fill="#2A2533" />
-            <Ellipse cx="75" cy="62" rx="4" ry="5.5" fill="#2A2533" />
-            <Ellipse cx="75" cy="61" rx="1.6" ry="2.5" fill={o.trim} />
-          </G>
-        )}
-        {outfit === 'hoodie' && (
-          <G>
-            <Path d="M48 64 Q60 76 72 64" stroke={darken(o.main, 0.35)} strokeWidth={2} fill="none" />
-            <Path d="M56 70 L55 84 M64 70 L65 84" stroke="#FFFFFF" strokeWidth={1.6} strokeLinecap="round" />
-            <Path d="M46 98 L74 98 L78 114 L42 114 Z" fill={darken(o.main, 0.15)} {...OUTLINE} />
-            <Path d="M52 82 l2 4 4.4.6-3.2 3.1.8 4.4-4-2.1-4 2.1.8-4.4-3.2-3.1 4.4-.6z" fill={o.accent} />
-          </G>
-        )}
-        {outfit === 'tactical' && (
-          <G>
-            {/* plate-carrier vest with pouches and straps */}
-            <Path d={female ? 'M44 68 L76 68 L78 108 L42 108 Z' : 'M41 68 L79 68 L81 108 L39 108 Z'} fill={ids.trim.url} {...OUTLINE} />
-            <Path d="M48 66 L48 72 M72 66 L72 72" stroke={darken(o.trim, 0.3)} strokeWidth={4} />
-            {[44, 56, 66].map((x) => (
-              <Rect key={x} x={x} y="92" width="10" height="13" rx="2" fill={darken(o.trim, 0.2)} {...OUTLINE} />
-            ))}
-            <Rect x="52" y="76" width="16" height="7" rx="1.5" fill={darken(o.trim, 0.3)} />
-            <Rect x="36" y="111" width="48" height="6" rx="2" fill="#2A2533" />
-          </G>
-        )}
-        {outfit === 'street' && (
-          <G>
-            {/* cropped jacket with neon piping and a glowing belt */}
-            <Path d="M54 66 L60 72 L66 66 L66 104 L54 104 Z" fill="#2E2A40" />
-            <Path d="M54 66 L54 104 M66 66 L66 104 M40 102 H80" stroke={o.trim} strokeWidth={2} />
-            <Rect x="38" y="108" width="44" height="5" rx="2.5" fill={o.accent} />
-            <Ellipse cx="60" cy="110.5" rx="26" ry="7" fill={ids.glow.url} opacity={0.5} />
-            <Path d="M70 76 L76 76 L73 84 L78 84 L69 96 L72 86 L67 86 Z" fill={o.accent} />
-          </G>
-        )}
-        {outfit === 'ranger' && (
-          <G>
-            <Path d="M54 66 L60 80 L66 66 L64 112 L56 112 Z" fill="#EADBC1" {...OUTLINE} />
-            <Path d="M40 104 H80" stroke={o.trim} strokeWidth={6} />
-            <Rect x="56" y="101" width="8" height="6" rx="1.5" fill="#FFC233" />
-            {/* scarf with a trailing end */}
-            <Path d="M44 62 Q60 74 76 62 L76 70 Q60 80 44 70 Z" fill={o.accent} {...OUTLINE} />
-            <Path d="M70 70 L76 92 L82 90 L76 68 Z" fill={darken(o.accent, 0.15)} {...OUTLINE} />
-          </G>
-        )}
-        {outfit === 'armor' && (
-          <G>
-            {/* chest plate with a glowing core and shoulder pads */}
-            <Path d="M44 70 L76 70 L74 96 L60 104 L46 96 Z" fill={lighten(o.main, 0.4)} {...OUTLINE} />
-            <Path d="M48 74 L60 92 L72 74" stroke={o.accent} strokeWidth={2.5} fill="none" strokeLinecap="round" />
-            <Circle cx="60" cy="84" r="5" fill={ids.glow.url} />
-            <Circle cx="60" cy="84" r="2.5" fill="#FFFFFF" />
-            <Ellipse cx={shoulder - 1} cy="70" rx="10" ry="7" fill={ids.main.url} {...OUTLINE} />
-            <Ellipse cx={rs + 1} cy="70" rx="10" ry="7" fill={ids.main.url} {...OUTLINE} />
-            <Path d={`M${shoulder - 8} 70 H${shoulder + 6} M${rs - 6} 70 H${rs + 8}`} stroke={o.accent} strokeWidth={1.6} />
-            <Rect x="36" y="110" width="48" height="6" rx="3" fill={o.trim} />
-            <Rect x="54" y="109" width="12" height="8" rx="2" fill={o.accent} />
-          </G>
-        )}
-
-        {/* the hand on the hip sits in front of the outfit */}
-        <Circle cx={rs - 6} cy="106" r="6" fill={gloves ? '#2A2533' : ids.skin.url} {...OUTLINE} />
-
-        {/* head */}
-        <Ellipse cx="39" cy="42" rx="4" ry="6" fill={ids.skin.url} {...OUTLINE} />
-        <Ellipse cx="81" cy="42" rx="4" ry="6" fill={ids.skin.url} {...OUTLINE} />
-        <Path d="M40 36 C40 16 80 16 80 36 C80 50 72 60 60 61 C48 60 40 50 40 36 Z" fill={ids.skin.url} {...OUTLINE} />
-
-        <FrontHair hair={style.hair} fill={ids.hair.url} shine={lighten(hair, 0.6)} />
-
-        {/* face: brows, eyes, nose, a confident smile */}
-        <Path
-          d={female ? 'M45 33 Q50 30.5 55 32.5 M65 32.5 Q70 30.5 75 33' : 'M44.5 33.5 L55 31.5 M65 31.5 L75.5 33.5'}
-          stroke={darken(hair, 0.35)}
-          strokeWidth={2.2}
-          strokeLinecap="round"
-          fill="none"
-        />
-        <Eyes female={female} iris={iris} />
-        <Path d="M60 44 L59 49 L61 49.5" stroke={darken(skin, 0.3)} strokeWidth={1.2} strokeLinecap="round" fill="none" />
-        <Ellipse cx="47" cy="49" rx="4.5" ry="2.5" fill={ids.blush.url} />
-        <Ellipse cx="73" cy="49" rx="4.5" ry="2.5" fill={ids.blush.url} />
-        <Path d="M54 53 Q60 57.5 66 52.5" stroke="#7A2E3E" strokeWidth={1.8} strokeLinecap="round" fill="none" />
-
-        {/* gear worn on the head */}
-        {outfit === 'tactical' && (
-          <G>
-            <Path d="M40 27 Q60 20 80 27" stroke="#2A2533" strokeWidth={3.5} fill="none" />
-            <Rect x="44" y="21" width="14" height="9" rx="4.5" fill="#2A2533" />
-            <Rect x="62" y="21" width="14" height="9" rx="4.5" fill="#2A2533" />
-            <Rect x="46" y="22.5" width="10" height="6" rx="3" fill="#FFB347" opacity={0.9} />
-            <Rect x="64" y="22.5" width="10" height="6" rx="3" fill="#FFB347" opacity={0.9} />
-          </G>
-        )}
-        {outfit === 'armor' && (
-          <G>
-            <Path d="M80 30 Q86 40 82 50" stroke="#3A4258" strokeWidth={3} fill="none" />
-            <Rect x="79" y="36" width="7" height="12" rx="3" fill={o.main} {...OUTLINE} />
-            <Path d="M82 48 Q76 56 66 56" stroke="#3A4258" strokeWidth={1.6} fill="none" />
-            <Circle cx="66" cy="56" r="1.8" fill={o.accent} />
-          </G>
-        )}
-        {outfit === 'ranger' && (
-          <G>
-            <Path d="M46 66 Q60 72 74 66" stroke="#4A3626" strokeWidth={2.5} fill="none" />
-            <Circle cx="53" cy="68" r="4" fill="#8FD0E8" stroke="#4A3626" strokeWidth={1.5} />
-            <Circle cx="67" cy="68" r="4" fill="#8FD0E8" stroke="#4A3626" strokeWidth={1.5} />
-          </G>
-        )}
-
-        {/* rim light */}
-        <Path d="M78 30 Q81 42 76 52" stroke="#FFFFFF" strokeOpacity={0.3} strokeWidth={2} strokeLinecap="round" fill="none" />
+        <Ellipse cx={100} cy={424} rx={46} ry={6} fill="#1A1028" opacity={0.15} />
+        {style.gender === 'female' ? <Aurora skin={skin} hair={hair} ids={ids} /> : <Kael skin={skin} hair={hair} ids={ids} />}
       </Svg>
     </Animated.View>
   );

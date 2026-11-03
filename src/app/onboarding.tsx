@@ -24,8 +24,8 @@ export default function Onboarding() {
   const [name, setName] = useState('');
   const [hero, setHero] = useState<HeroStyle>({
     gender: 'female',
-    hair: 'ponytail',
-    hair_color: PROFILE_DEFAULTS.hair_color,
+    hair: PROFILE_DEFAULTS.hair,
+    hair_color: 'blonde',
     skin: PROFILE_DEFAULTS.skin,
     outfit: PROFILE_DEFAULTS.outfit,
   });
@@ -60,7 +60,7 @@ export default function Onboarding() {
         {step === 0 && (
           <View style={styles.center}>
             <View style={styles.pair}>
-              <Hero style={hero} size={90} />
+              <Hero style={hero} size={64} />
               <Pet species="cat" size={80} />
             </View>
             <AppText variant="hero" center>
@@ -82,7 +82,7 @@ export default function Onboarding() {
           <>
             <AppText variant="title">Choose your hero</AppText>
             <View style={styles.center}>
-              <Hero style={hero} size={110} />
+              <Hero style={hero} size={80} />
             </View>
             <HeroCustomizer
               value={hero}

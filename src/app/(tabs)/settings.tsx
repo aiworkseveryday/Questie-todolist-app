@@ -63,7 +63,7 @@ export default function Settings() {
           </AppText>
         </View>
         <View style={{ alignItems: 'center' }}>
-          <Hero style={profile} size={100} />
+          <Hero style={profile} size={80} />
         </View>
         <HeroCustomizer
           value={profile}
