@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { HERO_LOOKS, Hero } from '@/characters/Hero';
 import { PETS, Pet } from '@/characters/Pet';
+import { PET_STAGES } from '@/game/engine';
 import type { HeroGender, PetSpecies } from '@/data/types';
 import { useTheme } from '@/theme/ThemeProvider';
 import { radius, space, tint } from '@/theme/tokens';
@@ -73,7 +74,50 @@ export function PetPicker({ pet, onChange }: { pet: PetSpecies; onChange: (p: Pe
   );
 }
 
+/**
+ * Pick which of the forms the pet has reached it is shown in. Picking the newest one keeps
+ * following evolution; an older one stays put even after the next evolution.
+ */
+export function PetFormPicker({
+  pet,
+  reached,
+  form,
+  accessory,
+  onChange,
+}: {
+  pet: PetSpecies;
+  /** Highest stage unlocked so far */
+  reached: number;
+  /** The picked form, null = newest */
+  form: number | null;
+  accessory: string | null;
+  onChange: (form: number | null) => void;
+}) {
+  const shown = form == null ? reached : Math.min(form, reached);
+  return (
+    <View style={styles.wrap}>
+      {PET_STAGES.map((s, i) => {
+        const unlocked = i <= reached;
+        return (
+          <View key={s.name} style={styles.formCell}>
+            <Tile
+              label={unlocked ? s.name : `Lv ${s.level}`}
+              selected={unlocked && shown === i}
+              onPress={() => unlocked && onChange(i === reached ? null : i)}>
+              <View style={{ opacity: unlocked ? 1 : 0.25 }}>
+                <Pet species={pet} stage={i} size={52} mood="happy" accessory={accessory} animated={false} />
+              </View>
+            </Tile>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  formCell: { width: '30%', flexGrow: 1 },
   row: { flexDirection: 'row', gap: space.sm },
   tile: {
     flex: 1,

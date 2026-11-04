@@ -1,7 +1,7 @@
 import { Modal, StyleSheet, View } from 'react-native';
 
 import { Pet } from '@/characters/Pet';
-import { levelFor, petStage } from '@/game/engine';
+import { shownPetStage } from '@/game/engine';
 import { useGame } from '@/data/store';
 import { useTheme } from '@/theme/ThemeProvider';
 import { palette, radius, space } from '@/theme/tokens';
@@ -40,7 +40,7 @@ export function Celebration() {
           <Pet
             species={profile.pet}
             mood="celebrate"
-            stage={petStage(levelFor(profile.xp).level)}
+            stage={shownPetStage(profile)}
             accessory={profile.pet_accessory}
             size={120}
           />

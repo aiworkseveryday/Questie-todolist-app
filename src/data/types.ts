@@ -58,6 +58,8 @@ export type Profile = {
   owned: string[];
   /** Free treats picked up from the shop on a day */
   freebies: { on: string | null; n: number };
+  /** Evolution stage to show the pet in (an earlier form the player prefers); null follows the level */
+  pet_form: number | null;
   /** Accessory the pet is wearing */
   pet_accessory: string | null;
   /** Hero customisation (see game/style.ts) */

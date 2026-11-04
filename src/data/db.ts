@@ -7,11 +7,12 @@ export const DB_NAME = 'questie.db';
 /** Fields added after the first release, with the values older profiles should start from */
 export const PROFILE_DEFAULTS: Pick<
   Profile,
-  'inventory' | 'fed_on' | 'freebies' | 'owned' | 'pet_accessory' | 'hair' | 'hair_color' | 'skin' | 'outfit'
+  'inventory' | 'fed_on' | 'freebies' | 'pet_form' | 'owned' | 'pet_accessory' | 'hair' | 'hair_color' | 'skin' | 'outfit'
 > = {
   inventory: {},
   fed_on: null,
   freebies: { on: null, n: 0 },
+  pet_form: null,
   owned: [],
   pet_accessory: null,
   hair: 'crop',

@@ -153,6 +153,12 @@ export function petStage(level: number) {
   return stage;
 }
 
+/** The form the pet is shown in: its current stage, or an earlier one the player picked. */
+export function shownPetStage(p: Pick<Profile, 'xp' | 'pet_form'>) {
+  const reached = petStage(levelFor(p.xp).level);
+  return p.pet_form == null ? reached : Math.min(p.pet_form, reached);
+}
+
 /** The next stage and the level it unlocks at, or null at Legendary. */
 export function nextPetStage(level: number) {
   return PET_STAGES[petStage(level) + 1] ?? null;

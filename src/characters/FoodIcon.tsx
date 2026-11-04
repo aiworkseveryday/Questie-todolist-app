@@ -1,18 +1,69 @@
-import Svg, { Circle, Defs, Ellipse, G, Path, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Defs, Ellipse, G, Mask, Path, Rect, Text as SvgText } from 'react-native-svg';
 
 import { Ball, darken, Drop, Glow, OUTLINE, useGradientIds } from './paint';
 
-/** Shaded food and boost icons for the shop and the feeding sheet. */
-export function FoodIcon({ id, size = 56 }: { id: string; size?: number }) {
+/**
+ * Bite marks, one cluster per bite: each is a few overlapping circles, so the edge left behind is
+ * scalloped like real teeth marks. Later bites eat into the middle until only a nub is left.
+ */
+const BITES = [
+  [
+    [50, 15, 9],
+    [57, 25, 7.5],
+    [42, 9, 7],
+  ],
+  [
+    [58, 40, 9.5],
+    [51, 48, 7.5],
+    [60, 31, 7.5],
+  ],
+  [
+    [10, 18, 9.5],
+    [17, 10, 7.5],
+    [6, 30, 8.5],
+  ],
+  [
+    [32, 16, 14],
+    [20, 30, 10],
+    [44, 30, 10],
+    [32, 30, 9],
+  ],
+];
+export const BITE_COUNT = BITES.length;
+
+/** Colour of the crumbs each food drops while being eaten. */
+export const CRUMB_COLOR: Record<string, string> = {
+  kibble: '#C98A4A',
+  apple: '#FFE7A8',
+  choco: '#8A5230',
+  cake: '#F6D49A',
+  fish: '#F4C6B0',
+  carrot: '#FF8A1F',
+  meat: '#C8553D',
+};
+
+/** Shaded food and boost icons for the shop and the feeding sheet. With `bites`, chunks are bitten out of it. */
+export function FoodIcon({ id, size = 56, bites = 0 }: { id: string; size?: number; bites?: number }) {
   const g = useGradientIds();
   const a = g('a');
   const b = g('b');
   const c = g('c');
   const shadow = g('shadow');
+  const bitten = g('bitten');
 
   return (
     <Svg width={size} height={size} viewBox="0 0 64 64">
       <Defs>
+        {bites > 0 && (
+          <Mask id={bitten.id} maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+            <Rect x="0" y="0" width="64" height="64" fill="#FFFFFF" />
+            {BITES.slice(0, bites)
+              .flat()
+              .map(([cx, cy, r]) => (
+                <Circle key={`${cx}-${cy}`} cx={cx} cy={cy} r={r} fill="#000000" />
+              ))}
+          </Mask>
+        )}
         {id === 'kibble' && (
           <>
             <Drop id={a.id} color="#3BA7FF" />
@@ -62,6 +113,7 @@ export function FoodIcon({ id, size = 56 }: { id: string; size?: number }) {
       </Defs>
 
       <Ellipse cx="32" cy="58" rx="20" ry="4" fill={shadow.url} />
+      <G mask={bites > 0 ? bitten.url : undefined}>
 
       {id === 'kibble' && (
         <G>
@@ -163,6 +215,7 @@ export function FoodIcon({ id, size = 56 }: { id: string; size?: number }) {
           <Path d="M16 20 L30 12" stroke="#FFFFFF" strokeOpacity={0.6} strokeWidth={3} strokeLinecap="round" />
         </G>
       )}
+      </G>
     </Svg>
   );
 }

@@ -5,12 +5,13 @@ import { Alert, View } from 'react-native';
 import { AppText } from '@/components/AppText';
 import { Button3D } from '@/components/Button3D';
 import { Card } from '@/components/Card';
-import { HeroPicker, PetPicker } from '@/components/CharacterPickers';
+import { HeroPicker, PetFormPicker, PetPicker } from '@/components/CharacterPickers';
 import { Chip, ChipRow } from '@/components/Chip';
 import { DateField } from '@/components/DateField';
 import { Input } from '@/components/Input';
 import { Screen } from '@/components/Screen';
 import { useGame } from '@/data/store';
+import { levelFor, petStage } from '@/game/engine';
 import { exportHistoryCsv } from '@/lib/csv';
 import { addDays, formatDay, fromISODate, toISODate, todayISO } from '@/lib/dates';
 import { useTheme, type ThemePreference } from '@/theme/ThemeProvider';
@@ -101,6 +102,20 @@ export default function Settings() {
       <Card style={{ gap: space.md }}>
         <AppText variant="heading">Companion</AppText>
         <PetPicker pet={profile.pet} onChange={(pet) => updateProfile({ pet })} />
+      </Card>
+
+      <Card style={{ gap: space.md }}>
+        <AppText variant="heading">Pet look</AppText>
+        <AppText muted>
+          Prefer an earlier form? Pick any one {profile.pet_name} has reached. Picking the newest keeps evolving.
+        </AppText>
+        <PetFormPicker
+          pet={profile.pet}
+          reached={petStage(levelFor(profile.xp).level)}
+          form={profile.pet_form}
+          accessory={profile.pet_accessory}
+          onChange={(pet_form) => updateProfile({ pet_form })}
+        />
       </Card>
 
       <Card style={{ gap: space.md }}>

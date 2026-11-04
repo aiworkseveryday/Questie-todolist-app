@@ -12,7 +12,7 @@ import { ProgressBar } from '@/components/Progress';
 import { Screen } from '@/components/Screen';
 import { loadDailyTotals } from '@/data/db';
 import { useGame } from '@/data/store';
-import { levelFor, nextPetStage, PET_STAGES, petMood, petStage, streakStatus } from '@/game/engine';
+import { levelFor, nextPetStage, PET_STAGES, petMood, shownPetStage, streakStatus } from '@/game/engine';
 import { addDays, toISODate } from '@/lib/dates';
 import { useTheme } from '@/theme/ThemeProvider';
 import { palette, radius, space, tint } from '@/theme/tokens';
@@ -76,7 +76,7 @@ export default function HeroScreen() {
 
   const lvl = levelFor(profile.xp);
   const status = streakStatus(profile);
-  const stage = petStage(lvl.level);
+  const stage = shownPetStage(profile);
   const next = nextPetStage(lvl.level);
   const max = Math.max(1, ...week.map((d) => d.done));
 

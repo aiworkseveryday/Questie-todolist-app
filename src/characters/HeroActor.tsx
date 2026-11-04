@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
+  FadeIn,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -24,12 +25,15 @@ const GOLD = '#FFC233';
 /** One full walk cycle (left step + right step). */
 export const HERO_STEP_MS = 520;
 
-export type HeroAction = 'idle' | 'walk' | 'crouch' | 'cheer' | 'wave';
+export type HeroAction = 'idle' | 'walk' | 'crouch' | 'pat' | 'cheer' | 'wave';
 
-/** Where the hand holding food sits in the 120×150 drawing while crouching, so food can be set down exactly. */
-export const HERO_HAND = { x: 29, y: 121 };
 /** Where the feet touch the ground in the 120×150 drawing. */
 export const HERO_FEET_Y = 138;
+/**
+ * Where the front hand ends up in the 120×150 drawing when the side-view hero faces left: kneeling to
+ * set food down, and reaching out to pat the pet. Scenes line the hero up with these.
+ */
+export const HERO_SIDE_HAND = { crouch: { x: 37.5, y: 113 }, pat: { x: 39, y: 74 } };
 
 /**
  * One moving part: a full-size SVG cached as a hardware texture. On Android an SVG can't use a
@@ -46,12 +50,8 @@ function Part({ w, h, style, children, extra }: { w: number; h: number; style?: 
   );
 }
 
-/**
- * The hero as a little actor for scenes on the Today screen: the same chibi with a sword, built
- * from moving parts so it can walk (legs step, arms swing, body bobs), crouch to set food down,
- * carry food in one hand, wave, and cheer with its sword in the air.
- */
-export function HeroActor({
+/** The hero facing you: waves and cheers with its sword in the air. */
+function HeroFront({
   gender,
   look,
   size = 72,
@@ -298,5 +298,257 @@ export function HeroActor({
         </Animated.View>
       </Animated.View>
     </View>
+  );
+}
+
+/**
+ * The hero seen from the side, drawn facing right (flipped to face left): legs swing from the hip
+ * in a real stride, arms swing opposite, the cape trails behind. It can carry food out in front,
+ * kneel to set it down and reach out to pat the pet.
+ */
+function HeroSide({
+  gender,
+  look,
+  size,
+  action,
+  holding,
+}: {
+  gender: HeroGender;
+  look: number;
+  size: number;
+  action: HeroAction;
+  holding: string | null;
+}) {
+  const l = HERO_LOOKS[look] ?? HERO_LOOKS[0];
+  const female = gender === 'female';
+  const w = size;
+  const h = size * 1.25;
+  const k = size / 120;
+  const px = (v: number) => v * k;
+
+  const cycle = useSharedValue(0);
+  const walk = useSharedValue(0);
+  const breath = useSharedValue(0);
+  const blink = useSharedValue(0);
+  const crouch = useSharedValue(0);
+  const carry = useSharedValue(holding ? 1 : 0);
+  const reach = useSharedValue(0);
+  const pat = useSharedValue(0);
+
+  useEffect(() => {
+    breath.value = withRepeat(withTiming(1, { duration: 2600, easing: Easing.linear }), -1);
+    blink.value = withRepeat(withSequence(withDelay(2600, withTiming(1, { duration: 80 })), withTiming(0, { duration: 110 })), -1);
+    return () => {
+      cancelAnimation(breath);
+      cancelAnimation(blink);
+    };
+  }, [breath, blink]);
+
+  useEffect(() => {
+    carry.value = withTiming(holding ? 1 : 0, { duration: 200 });
+  }, [holding, carry]);
+
+  useEffect(() => {
+    cancelAnimation(pat);
+    if (action === 'walk') {
+      cycle.value = 0;
+      cycle.value = withRepeat(withTiming(1, { duration: HERO_STEP_MS, easing: Easing.linear }), -1);
+      walk.value = withTiming(1, { duration: 140 });
+    } else {
+      walk.value = withTiming(0, { duration: 180 });
+    }
+    crouch.value = action === 'crouch' ? withSpring(1, { damping: 14, stiffness: 140 }) : withSpring(0, { damping: 16, stiffness: 160 });
+    reach.value = withTiming(action === 'pat' ? 1 : 0, { duration: 320, easing: Easing.out(Easing.quad) });
+    // Gentle pats on the head
+    pat.value =
+      action === 'pat'
+        ? withDelay(320, withRepeat(withSequence(withTiming(1, { duration: 200 }), withTiming(0, { duration: 220 })), -1))
+        : withTiming(0, { duration: 150 });
+  }, [action, cycle, walk, crouch, reach, pat]);
+
+  const bodyStyle = useAnimatedStyle(() => {
+    const s = Math.sin(cycle.value * Math.PI * 2);
+    const br = Math.sin(breath.value * Math.PI * 2);
+    // Up on each passing step, down when the legs are spread; lean into the stride a little
+    const y = -Math.abs(Math.cos(cycle.value * Math.PI * 2)) * 2.8 * k * walk.value + crouch.value * 9 * k + br * 0.5 * k;
+    return { transform: [{ translateY: y }, { rotate: `${3 * walk.value + s * 0.8 * walk.value + reach.value * 3}deg` }] };
+  });
+  const legStyle = (side: 1 | -1) => {
+    'worklet';
+    const s = Math.sin(cycle.value * Math.PI * 2) * side;
+    // Knees bend into a kneel: front leg steps forward, back leg tucks under
+    return { transform: [{ rotate: `${s * 30 * walk.value - crouch.value * (side > 0 ? 28 : -18)}deg` }] };
+  };
+  const frontLeg = useAnimatedStyle(() => legStyle(1));
+  const backLeg = useAnimatedStyle(() => legStyle(-1));
+  const crouchLegs = useAnimatedStyle(() => ({ transform: [{ scaleY: 1 - crouch.value * 0.22 }] }));
+  const frontArm = useAnimatedStyle(() => {
+    const s = Math.sin(cycle.value * Math.PI * 2);
+    const swing = -s * 24 * walk.value * (1 - carry.value);
+    const hold = -carry.value * (42 + s * 3 * walk.value);
+    const down = -crouch.value * 13 * carry.value - crouch.value * 40 * (1 - carry.value);
+    return { transform: [{ rotate: `${swing + hold + down - reach.value * 130 + pat.value * 14}deg` }] };
+  });
+  const backArm = useAnimatedStyle(() => ({ transform: [{ rotate: `${Math.sin(cycle.value * Math.PI * 2) * 24 * walk.value + crouch.value * 15}deg` }] }));
+  const capeStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${12 * walk.value + Math.sin(cycle.value * Math.PI * 4) * 4 * walk.value + Math.sin(breath.value * Math.PI * 2) * 1.5}deg` }],
+  }));
+  const headStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: crouch.value * 2 * k }, { rotate: `${crouch.value * 10 + reach.value * 4 + Math.sin(cycle.value * Math.PI * 4) * 1 * walk.value}deg` }],
+  }));
+  const blinkStyle = useAnimatedStyle(() => ({ transform: [{ scaleY: 1 - blink.value * 0.9 }] }));
+
+  const pants = '#3E3566';
+  const boot = '#7A5236';
+  const fs = size * 0.34;
+  const happy = action === 'pat';
+
+  const leg = (front: boolean) => (
+    <G>
+      <Rect x="54" y="110" width="12" height="22" rx="5" fill={front ? pants : darken(pants, 0.2)} {...OUTLINE} />
+      <Rect x="52" y="127" width="21" height="11" rx="5.5" fill={front ? boot : darken(boot, 0.2)} {...OUTLINE} />
+      {front && <Ellipse cx="62" cy="130" rx="4" ry="1.5" fill="#FFFFFF" opacity={0.3} />}
+    </G>
+  );
+
+  return (
+    <View style={{ width: w, height: h }}>
+      <Part w={w} h={h}>
+        <Ellipse cx="60" cy="143" rx="24" ry="5" fill="#1A1028" opacity={0.2} />
+      </Part>
+
+      <Animated.View style={[StyleSheet.absoluteFill, { transformOrigin: [px(60), px(HERO_FEET_Y), 0] }, bodyStyle]}>
+        {/* far arm and cape, behind the body */}
+        <Part w={w} h={h} style={[{ transformOrigin: [px(60), px(90), 0] }, backArm]}>
+          <Rect x="54" y="88" width="12" height="25" rx="6" fill={darken(l.outfit, 0.18)} {...OUTLINE} />
+          <Circle cx="60" cy="114" r="6" fill={darken(l.skin, 0.12)} {...OUTLINE} />
+        </Part>
+        <Part w={w} h={h} style={[{ transformOrigin: [px(56), px(86), 0] }, capeStyle]}>
+          <Path d="M56 86 Q42 108 36 132 Q48 137 62 132 Q60 110 64 88 Z" fill={darken(l.outfit, 0.28)} {...OUTLINE} />
+        </Part>
+        {/* sheathed sword on the back */}
+        <Part w={w} h={h}>
+          <G transform="rotate(-38 50 104)">
+            <Rect x="47" y="96" width="6" height="34" rx="2.5" fill="#5A3B28" {...OUTLINE} />
+            <Rect x="47" y="126" width="6" height="5" rx="2" fill={GOLD} />
+            <Rect x="43" y="92" width="14" height="4" rx="2" fill={GOLD} {...OUTLINE} />
+            <Rect x="48" y="83" width="4" height="10" rx="1.5" fill="#5A3B28" />
+          </G>
+        </Part>
+
+        {/* legs: the body sinks onto them when kneeling */}
+        <Animated.View style={[StyleSheet.absoluteFill, { transformOrigin: [px(60), px(HERO_FEET_Y), 0] }, crouchLegs]}>
+          <Part w={w} h={h} style={[{ transformOrigin: [px(60), px(112), 0] }, backLeg]}>
+            {leg(false)}
+          </Part>
+          <Part w={w} h={h} style={[{ transformOrigin: [px(60), px(112), 0] }, frontLeg]}>
+            {leg(true)}
+          </Part>
+        </Animated.View>
+
+        <Part w={w} h={h}>
+          <Path d="M47 88 Q60 82 73 88 L77 120 Q60 126 43 120 Z" fill={l.outfit} {...OUTLINE} />
+          <Path d="M47 92 Q45 106 46 116" stroke={darken(l.outfit, 0.25)} strokeOpacity={0.5} strokeWidth={3} strokeLinecap="round" fill="none" />
+          <Path d="M70 92 Q73 104 72 116" stroke="#FFFFFF" strokeOpacity={0.25} strokeWidth={3} strokeLinecap="round" fill="none" />
+          <Path d="M60 86 Q68 92 74 88 Q68 90 60 86 Z" fill={lighten(l.outfit, 0.35)} />
+          <Rect x="43" y="107" width="34" height="7" rx="2" fill="#5A3B28" {...OUTLINE} />
+          <Rect x="68" y="104.5" width="8" height="12" rx="2.5" fill={GOLD} stroke={darken(GOLD, 0.4)} strokeWidth={1} />
+        </Part>
+
+        {/* head, in profile */}
+        <Animated.View style={[StyleSheet.absoluteFill, { transformOrigin: [px(62), px(86), 0] }, headStyle]}>
+          <Part w={w} h={h}>
+            {female && <Path d="M36 40 Q24 72 34 98 Q44 104 54 94 Q50 74 54 56 Z" fill={l.hair} {...OUTLINE} />}
+            <Circle cx="62" cy="52" r="32" fill={l.skin} {...OUTLINE} />
+            <Path d="M34 64 A32 32 0 0 0 62 84 A32 32 0 0 0 76 81 Q54 80 40 62 Z" fill={darken(l.skin, 0.14)} opacity={0.35} />
+            <Ellipse cx="53" cy="58" rx="5" ry="7" fill={l.skin} {...OUTLINE} />
+            <Path d="M52 55 Q55 58 52 61" stroke={darken(l.skin, 0.3)} strokeWidth={1.4} fill="none" strokeLinecap="round" />
+            <Path d="M92.5 57 Q98 60 93 64" fill={l.skin} stroke={darken(l.skin, 0.28)} strokeWidth={1.3} strokeLinecap="round" />
+            {female ? (
+              <G>
+                <Path d="M29 62 C20 14 76 4 96 40 C86 33 76 31 68 33 C62 40 56 43 50 43 C47 52 46 59 46 66 Q36 72 29 62 Z" fill={l.hair} {...OUTLINE} />
+                <Path d="M44 22 L36 14 L36 30 Z M44 22 L52 14 L52 30 Z" fill="#FF7AC6" stroke={darken('#FF7AC6', 0.4)} strokeWidth={1} />
+                <Circle cx="44" cy="22" r="3" fill={GOLD} />
+              </G>
+            ) : (
+              <Path
+                d="M29 62 C21 18 70 4 96 36 L88 40 L86 31 L78 39 L73 29 L65 38 L60 30 C55 40 50 48 47 64 Q37 70 29 62 Z"
+                fill={l.hair}
+                {...OUTLINE}
+              />
+            )}
+            <Path d="M46 26 Q62 16 80 22" stroke="#FFFFFF" strokeOpacity={0.3} strokeWidth={4} strokeLinecap="round" fill="none" />
+            <Path d="M75 45 Q80 42.5 86 45" stroke={darken(l.hair, 0.2)} strokeWidth={2.6} strokeLinecap="round" fill="none" />
+            <Ellipse cx="82" cy="68" rx="5.5" ry="3.2" fill="#FF6FA8" opacity={0.35} />
+            <Path d={happy ? 'M82 70 Q87 79 92 70 Z' : 'M83 71 Q87.5 75 91.5 70.5'} fill={happy ? '#5A2333' : 'none'} stroke="#5A2333" strokeWidth={2} strokeLinecap="round" />
+          </Part>
+          {happy ? (
+            <Part w={w} h={h}>
+              <Path d="M76 58 Q80.5 51 85 58" stroke={INK} strokeWidth={3} strokeLinecap="round" fill="none" />
+            </Part>
+          ) : (
+            <Part w={w} h={h} style={[{ transformOrigin: [px(80), px(57), 0] }, blinkStyle]}>
+              <Ellipse cx="80" cy="57" rx="4.6" ry="8.4" fill={l.eyes} />
+              <Ellipse cx="81.4" cy="58.5" rx="2.6" ry="4.6" fill="#0E0818" />
+              <Circle cx="82.2" cy="53.6" r="1.9" fill="#FFFFFF" />
+              {female && <Path d="M76 50 Q81 46 86 49 L89 46" stroke={INK} strokeWidth={2} strokeLinecap="round" fill="none" />}
+            </Part>
+          )}
+        </Animated.View>
+
+        {/* near arm, in front of everything, carrying the food */}
+        <Part
+          w={w}
+          h={h}
+          style={[{ transformOrigin: [px(62), px(90), 0] }, frontArm]}
+          extra={
+            holding ? (
+              <View style={{ position: 'absolute', left: px(62) - fs / 2, top: px(119) - fs * 0.6, width: fs, height: fs }}>
+                <FoodIcon id={holding} size={fs} />
+              </View>
+            ) : null
+          }>
+          <Rect x="56" y="88" width="12" height="25" rx="6" fill={l.outfit} {...OUTLINE} />
+          <Rect x="58" y="90" width="3.5" height="17" rx="1.7" fill="#FFFFFF" opacity={0.25} />
+          <Circle cx="62" cy="115" r="6.5" fill={l.skin} {...OUTLINE} />
+        </Part>
+      </Animated.View>
+    </View>
+  );
+}
+
+/**
+ * The hero as a little actor for scenes on the Today screen, built from moving parts. Facing left or
+ * right it's drawn from the side and really walks; facing you (0) it can wave and cheer.
+ */
+export function HeroActor({
+  gender,
+  look,
+  size = 72,
+  action = 'idle',
+  holding = null,
+  facing = 0,
+}: {
+  gender: HeroGender;
+  look: number;
+  /** Width; the hero is 1.25× as tall */
+  size?: number;
+  action?: HeroAction;
+  /** Food id carried in the front hand */
+  holding?: string | null;
+  /** -1 faces left, 1 faces right, 0 faces you */
+  facing?: -1 | 0 | 1;
+}) {
+  return (
+    // Turning around is a quick cross-fade between the views
+    <Animated.View key={facing} entering={FadeIn.duration(140)} style={{ width: size, height: size * 1.25 }}>
+      {facing === 0 ? (
+        <HeroFront gender={gender} look={look} size={size} action={action} holding={holding} />
+      ) : (
+        <View style={{ transform: [{ scaleX: facing }] }}>
+          <HeroSide gender={gender} look={look} size={size} action={action} holding={holding} />
+        </View>
+      )}
+    </Animated.View>
   );
 }

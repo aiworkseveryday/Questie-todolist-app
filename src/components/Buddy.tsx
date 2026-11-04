@@ -26,8 +26,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { FoodIcon } from '@/characters/FoodIcon';
-import { HERO_FEET_Y, HERO_HAND, HeroActor, type HeroAction } from '@/characters/HeroActor';
+import { BITE_COUNT, CRUMB_COLOR, FoodIcon } from '@/characters/FoodIcon';
+import { HERO_FEET_Y, HERO_SIDE_HAND, HeroActor, type HeroAction } from '@/characters/HeroActor';
 import { HOP_GROUND, Pet, STEP_MS, type PetAction, type PetMood } from '@/characters/Pet';
 import { HOME_DOOR } from '@/characters/PetHome';
 import { AppText } from '@/components/AppText';
@@ -48,7 +48,7 @@ const FEET = 0.93;
 const HERO_W = 70;
 const HERO_SPEED = 0.085;
 /** Feeding this many times within STUFFED_MS makes the pet too full to eat more. */
-const STUFFED_AFTER = 3;
+const STUFFED_AFTER = 2;
 const STUFFED_MS = 2 * 60 * 1000;
 
 type BuddyApi = {
@@ -87,17 +87,60 @@ function measure(v: ViewRef | null) {
   });
 }
 
-/** Food on the plate, shrinking bite by bite. */
+const FOOD_SIZE = 34;
+
+/** One crumb flung out by a bite: flies up and out, then falls and fades. */
+function Crumb({ angle, dist, color, size }: { angle: number; dist: number; color: string; size: number }) {
+  const t = useSharedValue(0);
+  useEffect(() => {
+    t.value = withTiming(1, { duration: 650, easing: Easing.out(Easing.quad) });
+  }, [t]);
+  const style = useAnimatedStyle(() => ({
+    opacity: 1 - t.value * t.value,
+    transform: [
+      { translateX: Math.cos(angle) * dist * t.value },
+      { translateY: -Math.sin(angle) * dist * t.value + 26 * t.value * t.value },
+      { rotate: `${t.value * 240}deg` },
+    ],
+  }));
+  return <Animated.View style={[{ position: 'absolute', width: size, height: size, borderRadius: size / 3, backgroundColor: color }, style]} />;
+}
+
+/** A little spray of crumbs from where the pet just bit. */
+function Crumbs({ x, y, color }: { x: number; y: number; color: string }) {
+  // Fixed spread so every bite looks a bit different but nothing random runs during render
+  const bits = [
+    [0.4, 22, 4],
+    [1.1, 18, 3],
+    [1.7, 24, 3.5],
+    [2.5, 20, 3],
+    [2.9, 16, 4],
+    [0.9, 28, 2.5],
+  ];
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', left: x, top: y }}>
+      {bits.map(([a, d, sz], i) => (
+        <Crumb key={i} angle={a} dist={d} size={sz} color={i % 3 === 2 ? '#FFFFFF' : color} />
+      ))}
+    </View>
+  );
+}
+
+/** Food on the plate, with real bite marks taken out of it and crumbs flying at every bite. */
 function GroundFood({ id, x, y, bites }: { id: string; x: number; y: number; bites: number }) {
-  const left = Math.max(0, 1 - bites / 3);
-  if (left <= 0) return null;
-  const size = 34 * (0.35 + 0.65 * left);
+  // Each bite gives the food a little jolt
+  const jolt = useSharedValue(0);
+  useEffect(() => {
+    if (bites) jolt.value = withSequence(withTiming(1, { duration: 70 }), withSpring(0, { damping: 6, stiffness: 260 }));
+  }, [bites, jolt]);
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: 1 - jolt.value * 0.1 }, { rotate: `${jolt.value * -6}deg` }] }));
+  if (bites >= BITE_COUNT) return null;
   return (
     <Animated.View
       entering={ZoomIn.duration(180)}
       pointerEvents="none"
-      style={{ position: 'absolute', left: x - size / 2, top: y - size + 2, width: size, height: size }}>
-      <FoodIcon id={id} size={size} />
+      style={[{ position: 'absolute', left: x - FOOD_SIZE / 2, top: y - FOOD_SIZE + 2, width: FOOD_SIZE, height: FOOD_SIZE }, style]}>
+      <FoodIcon id={id} size={FOOD_SIZE} bites={bites} />
     </Animated.View>
   );
 }
@@ -132,7 +175,7 @@ export function BuddyProvider({
   const [action, setAction] = useState<PetAction>('idle');
   const [moodOverride, setMoodOverride] = useState<PetMood | null>(null);
   const [food, setFood] = useState<{ id: string; x: number; y: number; bites: number } | null>(null);
-  const [actor, setActor] = useState<{ action: HeroAction; holding: string | null; lean: number } | null>(null);
+  const [actor, setActor] = useState<{ action: HeroAction; holding: string | null; facing: -1 | 0 | 1 } | null>(null);
   const [stuffed, setStuffed] = useState(false);
 
   const x = useSharedValue(0);
@@ -143,6 +186,7 @@ export function BuddyProvider({
   const heroIn = useSharedValue(0);
   const fat = useSharedValue(0);
   const wobble = useSharedValue(0);
+  const roll = useSharedValue(0);
   // When each recent feeding was asked for, to spot overfeeding
   const feedTimes = useRef<number[]>([]);
 
@@ -205,39 +249,56 @@ export function BuddyProvider({
     setMoodOverride(null);
   }, []);
 
-  /** Walk the hero to a point (its top-left), stepping all the way. */
+  /**
+   * Walk the hero to a point (its top-left), stepping all the way. It faces where it's going,
+   * unless `facing` is given (shuffling back a step while still looking at the pet).
+   */
   const heroWalk = useCallback(
-    async (tx: number, ty: number) => {
+    async (tx: number, ty: number, facing?: -1 | 1) => {
       const fx = hx.get();
       const d = Math.hypot(tx - fx, ty - hy.get());
       if (d < 2) return;
       const ms = d / HERO_SPEED;
-      setActor((a) => a && { ...a, action: 'walk', lean: Math.sign(tx - fx) });
+      const dir = facing ?? (tx < fx ? -1 : 1);
+      setActor((a) => a && { ...a, action: 'walk', facing: dir });
       hx.set(withTiming(tx, { duration: ms, easing: Easing.linear }));
       hy.set(withTiming(ty, { duration: ms, easing: Easing.linear }));
       await wait(ms);
-      setActor((a) => a && { ...a, action: 'idle', lean: 0 });
+      setActor((a) => a && { ...a, action: 'idle' });
     },
     [hx, hy],
   );
-  const heroDo = (action: HeroAction, holding?: string | null) =>
-    setActor((a) => a && { ...a, action, holding: holding === undefined ? a.holding : holding });
+  const heroDo = (action: HeroAction, change: { holding?: string | null; facing?: -1 | 0 | 1 } = {}) =>
+    setActor((a) => a && { ...a, action, ...change });
 
-  /** Too much food: the pet puffs up round, wobbles and cries that it can't eat any more. */
+  /** Too much food: the pet puffs up into a ball, rolls over on the ground and cries that it can't eat any more. */
   const overfed = useCallback(async () => {
     setMoodOverride('sad');
     setStuffed(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     fat.set(withSpring(1, { damping: 6, stiffness: 110 }));
-    wobble.set(withRepeat(withSequence(withTiming(1, { duration: 280 }), withTiming(-1, { duration: 280 })), -1, true));
-    await wait(3400);
+    await wait(700);
+    // Roll over one way and back like a ball, towards whichever side has room
+    const dir = x.get() + SIZE + 50 < boxRef.current.w ? 1 : -1;
+    const from = x.get();
+    const rollOnce = async (to: number, turn: number) => {
+      roll.set(withTiming(turn, { duration: 950, easing: Easing.inOut(Easing.quad) }));
+      x.set(withTiming(to, { duration: 950, easing: Easing.inOut(Easing.quad) }));
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      await wait(1000);
+    };
+    await rollOnce(from + dir * 46, dir);
+    wobble.set(withRepeat(withSequence(withTiming(1, { duration: 260 }), withTiming(-1, { duration: 260 })), -1, true));
+    await wait(1100);
     cancelAnimation(wobble);
-    wobble.set(withTiming(0, { duration: 200 }));
+    wobble.set(withTiming(0, { duration: 150 }));
+    await rollOnce(from, 0);
+    await wait(500);
     fat.set(withTiming(0, { duration: 900, easing: Easing.inOut(Easing.quad) }));
     setStuffed(false);
     await wait(700);
     setMoodOverride(null);
-  }, [fat, wobble]);
+  }, [fat, wobble, roll, x]);
 
   /** Where the pet stands to go in or out of its home, in overlay coordinates. */
   const doorSpot = useCallback(async () => {
@@ -338,56 +399,64 @@ export function BuddyProvider({
         if (!door) return;
         const plateX = door.cx;
         const plateY = door.bottom + 10;
-        // The hero stands just right of the plate, so the hand with the food hangs over it when crouching
+        // Hero lines up by its hands: over the plate when kneeling, then on the pet's head to pat it
         const kh = HERO_W / 120;
-        const standX = plateX - HERO_HAND.x * kh;
-        const standY = plateY + 4 - HERO_FEET_Y * kh;
+        const heroY = plateY - HERO_FEET_Y * kh;
+        const placeX = plateX - HERO_SIDE_HAND.crouch.x * kh;
+        const patX = door.cx + 16 - HERO_SIDE_HAND.pat.x * kh;
 
-        // The hero walks in from the right with the food, while the pet hurries home and waits by its plate
+        // The pet stops and watches excitedly while the hero walks in from the right with the food
+        if (outRef.current) setMoodOverride('celebrate');
         hx.set(boxRef.current.w + 10);
-        hy.set(standY);
-        setActor({ action: 'walk', holding: foodId, lean: -1 });
+        hy.set(heroY);
+        setActor({ action: 'walk', holding: foodId, facing: -1 });
         heroIn.set(withTiming(1, { duration: 250 }));
-        await Promise.all([
-          heroWalk(standX, standY),
-          (async () => {
-            if (outRef.current) await moveTo(door.x, door.y);
-            else await comeOut(false);
-            setMoodOverride('celebrate');
-          })(),
-        ]);
+        await heroWalk(placeX, heroY);
 
-        // Kneel down, set the food on the plate, stand back up
+        // Kneel, set the food on the plate, get up and shuffle back a step, still facing the pet
         heroDo('crouch');
-        await wait(480);
+        await wait(520);
         setFood({ id: foodId, x: plateX, y: plateY, bites: 0 });
-        heroDo('crouch', null);
+        heroDo('crouch', { holding: null });
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        await wait(320);
+        await wait(380);
         heroDo('idle');
-        await wait(250);
-        // Step aside to give the pet room, then cheer it on while it eats
-        await heroWalk(standX + 62, standY);
-        heroDo('cheer');
-
-        setMoodOverride('happy');
         await wait(200);
+        await heroWalk(patX, heroY, -1);
+
+        // The pet comes over to its plate
+        setMoodOverride(null);
+        if (outRef.current) await moveTo(door.x, door.y);
+        else await comeOut(false);
+
+        // A pat on the head as it arrives
+        heroDo('pat');
+        setMoodOverride('happy');
+        Haptics.selectionAsync();
+        await wait(1500);
+        heroDo('idle');
+
+        // Eat bite by bite while the hero waits right there
+        await wait(150);
         setAction('eat');
-        for (let b = 1; b <= 3; b++) {
-          await wait(600);
+        for (let b = 1; b <= BITE_COUNT; b++) {
+          await wait(560);
           setFood((f) => (f ? { ...f, bites: b } : f));
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
+        // let the last crumbs land
+        await wait(600);
         setFood(null);
         setAction('chew');
-        await wait(1400);
+        heroDo('pat');
+        await wait(1300);
         setAction('idle');
 
-        // The hero waves goodbye and walks off while the pet reacts
-        heroDo('wave');
+        // Turn to say bye, then walk off to the right while the pet reacts
+        heroDo('wave', { facing: 0 });
         const leave = (async () => {
-          await wait(1300);
-          await heroWalk(boxRef.current.w + 10, standY);
+          await wait(1200);
+          await heroWalk(boxRef.current.w + 10, heroY);
           heroIn.set(withTiming(0, { duration: 200 }));
           await wait(200);
           setActor(null);
@@ -420,6 +489,10 @@ export function BuddyProvider({
   const fatStyle = useAnimatedStyle(() => ({
     transform: [{ scaleX: 1 + fat.value * (0.42 + wobble.value * 0.05) }, { scaleY: 1 + fat.value * (0.06 - wobble.value * 0.04) }],
   }));
+  // Rolling over: one full turn about the middle of the round body, lifted so it stays on the ground
+  const rollStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: -Math.abs(Math.sin(roll.value * Math.PI)) * 6 }, { rotate: `${roll.value * 360}deg` }],
+  }));
   const petStyle = useAnimatedStyle(() => ({
     opacity: appear.value,
     transform: [{ translateX: x.value }, { translateY: y.value }, { scale: 0.6 + appear.value * 0.4 }],
@@ -442,8 +515,10 @@ export function BuddyProvider({
           {out && (
             <Animated.View style={[styles.pet, petStyle]}>
               <Pressable accessibilityLabel="Your pet" onPress={onTapPet} hitSlop={6}>
-                <Animated.View style={[{ transformOrigin: [SIZE / 2, SIZE * FEET, 0] }, fatStyle]}>
-                  <Pet species={species} stage={stage} accessory={accessory} size={SIZE} mood={moodOverride ?? mood} action={action} />
+                <Animated.View style={[{ transformOrigin: [SIZE / 2, SIZE * 0.64, 0] }, rollStyle]}>
+                  <Animated.View style={[{ transformOrigin: [SIZE / 2, SIZE * FEET, 0] }, fatStyle]}>
+                    <Pet species={species} stage={stage} accessory={accessory} size={SIZE} mood={moodOverride ?? mood} action={action} />
+                  </Animated.View>
                 </Animated.View>
               </Pressable>
               {stuffed && (
@@ -457,9 +532,12 @@ export function BuddyProvider({
           )}
           {/* in front of the pet, so it looks like it's eating from the plate by its door */}
           {food && <GroundFood id={food.id} x={food.x} y={food.y} bites={food.bites} />}
+          {food && food.bites > 0 && (
+            <Crumbs key={food.bites} x={food.x} y={food.y - FOOD_SIZE * 0.6} color={CRUMB_COLOR[food.id] ?? '#C98A4A'} />
+          )}
           {actor && (
             <Animated.View pointerEvents="none" style={[styles.hero, heroStyle]}>
-              <HeroActor gender={hero.gender} look={hero.look} size={HERO_W} action={actor.action} holding={actor.holding} lean={actor.lean} />
+              <HeroActor gender={hero.gender} look={hero.look} size={HERO_W} action={actor.action} holding={actor.holding} facing={actor.facing} />
             </Animated.View>
           )}
         </View>

@@ -91,7 +91,7 @@ function Transform({ species, from, to, accessory }: { species: Parameters<typeo
 
 /** "Congratulations! Mochi evolved into a Kid!" with confetti blasts. Waits until any level-up popup is closed. */
 export function Evolution() {
-  const { evolution, dismissEvolution, reward, profile } = useGame();
+  const { evolution, dismissEvolution, reward, profile, updateProfile } = useGame();
   const { colors } = useTheme();
   const visible = !!evolution && !reward && !!profile;
 
@@ -125,7 +125,27 @@ export function Evolution() {
               ? 'The ultimate form. Your hard work made this happen.'
               : `Keep completing quests and ${profile.pet_name} will keep growing.`}
           </AppText>
-          <Button3D title="Awesome!" onPress={dismissEvolution} style={{ alignSelf: 'stretch', marginTop: space.sm }} />
+          <Button3D
+            title="Awesome!"
+            onPress={() => {
+              // A new form always shows, even if an older look was picked before
+              updateProfile({ pet_form: null });
+              dismissEvolution();
+            }}
+            style={{ alignSelf: 'stretch', marginTop: space.sm }}
+          />
+          <Button3D
+            title="Keep the old look"
+            tone="ghost"
+            small
+            onPress={() => {
+              updateProfile({ pet_form: evolution.stage - 1 });
+              dismissEvolution();
+            }}
+          />
+          <AppText variant="caption" muted center>
+            You can switch forms any time in Settings.
+          </AppText>
         </View>
         <Blast delay={900} />
         <Blast delay={1300} seed={40} count={22} />

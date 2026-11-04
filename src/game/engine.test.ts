@@ -1,5 +1,5 @@
 import type { Item, Profile } from '@/data/types';
-import { applyStreak, gain, greeting, isDueOn, levelFor, nextPetStage, penalty, petMood, petStage, streakStatus, tapXp } from './engine';
+import { applyStreak, gain, greeting, isDueOn, levelFor, nextPetStage, penalty, petMood, petStage, shownPetStage, streakStatus, tapXp } from './engine';
 
 const base: Profile = {
   name: 'me',
@@ -17,6 +17,7 @@ const base: Profile = {
   inventory: {},
   fed_on: null,
   freebies: { on: null, n: 0 },
+  pet_form: null,
   owned: [],
   pet_accessory: null,
   hair: 'crop',
@@ -127,6 +128,16 @@ describe('pet stages', () => {
     expect(petStage(30)).toBe(4);
     expect(nextPetStage(7)).toEqual({ name: 'Teen', level: 10 });
     expect(nextPetStage(40)).toBeNull();
+  });
+});
+
+describe('shownPetStage', () => {
+  it('shows the newest form unless an earlier one was picked, and never one not reached yet', () => {
+    let xp = 0;
+    while (petStage(levelFor(xp).level) < 2) xp += 10;
+    expect(shownPetStage({ xp, pet_form: null })).toBe(2);
+    expect(shownPetStage({ xp, pet_form: 0 })).toBe(0);
+    expect(shownPetStage({ xp, pet_form: 4 })).toBe(2);
   });
 });
 

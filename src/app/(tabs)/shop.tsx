@@ -9,7 +9,7 @@ import { Button3D } from '@/components/Button3D';
 import { Card } from '@/components/Card';
 import { Screen } from '@/components/Screen';
 import { useGame } from '@/data/store';
-import { levelFor, MAX_FREEZES, petStage } from '@/game/engine';
+import { MAX_FREEZES, shownPetStage } from '@/game/engine';
 import { ACCESSORIES, BOOSTS, FOODS, FREE_PER_DAY, freebieFor, freebiesLeft, type ShopItem } from '@/game/shop';
 import { todayISO } from '@/lib/dates';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -54,7 +54,7 @@ export default function Shop() {
   const [toast, setToast] = useState<{ key: number; text: string; ok: boolean } | null>(null);
   const toastSeq = useRef(0);
   if (!profile) return null;
-  const stage = petStage(levelFor(profile.xp).level);
+  const stage = shownPetStage(profile);
   const freebie = freebieFor(profile.pet);
   const freeLeft = freebiesLeft(profile, todayISO());
 
@@ -97,7 +97,7 @@ export default function Shop() {
             item={freebie}
             owned={profile.inventory[freebie.id] ?? 0}
             disabled={freeLeft <= 0}
-            label={freeLeft > 0 ? `Free · ${freeLeft} left` : 'Back tomorrow'}
+            label={freeLeft > 0 ? `Free · ${freeLeft} left` : 'All gone today'}
             onBuy={() => purchase(freebie)}
           />
           {/* keeps the free card half width, like the others */}

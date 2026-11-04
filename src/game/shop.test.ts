@@ -18,6 +18,7 @@ const base: Profile = {
   inventory: {},
   fed_on: null,
   freebies: { on: null, n: 0 },
+  pet_form: null,
   owned: [],
   pet_accessory: null,
   hair: 'crop',

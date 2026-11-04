@@ -14,7 +14,7 @@ import { ProgressRing } from '@/components/Progress';
 import { Screen } from '@/components/Screen';
 import { useGame } from '@/data/store';
 import type { Item } from '@/data/types';
-import { greeting, isDueOn, levelFor, petMood, petStage, streakStatus, type StreakState } from '@/game/engine';
+import { greeting, isDueOn, levelFor, petMood, shownPetStage, streakStatus, type StreakState } from '@/game/engine';
 import { dueAt, toISODate } from '@/lib/dates';
 import { useTheme } from '@/theme/ThemeProvider';
 import { SLIDE_MS, SPRING } from '@/theme/motion';
@@ -52,7 +52,7 @@ export default function Today() {
   return (
     <BuddyProvider
       species={profile.pet}
-      stage={petStage(levelFor(profile.xp).level)}
+      stage={shownPetStage(profile)}
       accessory={profile.pet_accessory}
       mood={petMood(status.state, fedToday)}
       hero={{ gender: profile.gender, look: profile.look }}>
