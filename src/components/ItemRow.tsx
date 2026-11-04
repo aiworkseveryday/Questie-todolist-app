@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Haptics from 'expo-haptics';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { GestureDetector, Pressable, usePanGesture } from 'react-native-gesture-handler';
 import Animated, {
@@ -21,7 +21,6 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { POP, POP_SCALE, SPRING } from '@/theme/motion';
 import { palette, radius, space, tint } from '@/theme/tokens';
 import { AppText } from './AppText';
-import { useBuddy, type ViewRef } from './Buddy';
 
 export const DIFFICULTY_COLOR: Record<Difficulty, string> = {
   easy: palette.mint,
@@ -48,6 +47,11 @@ type Props = {
   onTap: (delta: 1 | -1) => void;
   onEdit: () => void;
   onDelete: () => void;
+  /** Multi-select mode is on (started by a long press) */
+  selecting?: boolean;
+  selected?: boolean;
+  /** Long press starts selecting; while selecting, a tap toggles this row */
+  onSelect?: () => void;
 };
 
 /** Floating "+20 XP" that rises and fades after a completion. */
@@ -101,14 +105,12 @@ function GoalRing({ count, goal, color, track }: { count: number; goal: number; 
   );
 }
 
-export function ItemRow({ item, done, count, overdue, plus, minus, onToggle, onTap, onEdit, onDelete }: Props) {
+export function ItemRow({ item, done, count, overdue, plus, minus, onToggle, onTap, onEdit, onDelete, selecting = false, selected = false, onSelect }: Props) {
   const { colors } = useTheme();
   const x = useSharedValue(0);
   const start = useSharedValue(0);
   const armed = useSharedValue(false);
   const pop = useSharedValue(1);
-  const rowRef = useRef<ViewRef>(null);
-  const buddy = useBuddy();
   const [burst, setBurst] = useState<{ key: number; amount: number } | null>(null);
   const isCounter = item.kind === 'counter';
   const accent = DIFFICULTY_COLOR[item.difficulty];
@@ -129,9 +131,6 @@ export function ItemRow({ item, done, count, overdue, plus, minus, onToggle, onT
     }
     pop.value = withSequence(withSpring(POP_SCALE, POP), withSpring(1, POP));
     setBurst({ key: Date.now(), amount });
-    // The pet walks over to draw the tick on finished quests, and cheers good-habit taps
-    if (isCounter) buddy?.cheer();
-    else if (count + 1 >= goal) buddy?.drawTick(rowRef.current, item.id);
   };
   const tick = () => Haptics.selectionAsync();
   const close = () => {
@@ -139,6 +138,8 @@ export function ItemRow({ item, done, count, overdue, plus, minus, onToggle, onT
   };
 
   const pan = usePanGesture({
+    // No swiping while picking quests to delete
+    enabled: !selecting,
     // Horizontal drags only, so vertical scrolling still works
     activeOffsetX: [-12, 12],
     failOffsetY: [-14, 14],
@@ -179,7 +180,7 @@ export function ItemRow({ item, done, count, overdue, plus, minus, onToggle, onT
   const checkStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
 
   return (
-    <View ref={rowRef} collapsable={false}>
+    <View>
       <Animated.View style={[styles.under, { backgroundColor: colors.success }, leftStyle]}>
         <MaterialCommunityIcons name={isCounter ? 'plus-thick' : done ? 'undo' : 'check-bold'} size={28} color="#fff" />
       </Animated.View>
@@ -206,12 +207,30 @@ export function ItemRow({ item, done, count, overdue, plus, minus, onToggle, onT
 
       <GestureDetector gesture={pan}>
         <Animated.View style={rowStyle}>
-          <Pressable onLongPress={onEdit} delayLongPress={400}>
+          <Pressable
+            onLongPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              onSelect?.();
+            }}
+            delayLongPress={400}>
             <View
               style={[
                 styles.row,
-                { backgroundColor: colors.surface, borderColor: colors.border, opacity: done && !isCounter ? 0.6 : 1 },
+                {
+                  backgroundColor: selected ? tint(colors.primary, 0.1) : colors.surface,
+                  borderColor: selected ? colors.primary : colors.border,
+                  opacity: done && !isCounter && !selecting ? 0.6 : 1,
+                },
               ]}>
+              {selecting && (
+                <View
+                  style={[
+                    styles.selectDot,
+                    { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.primary : colors.surface },
+                  ]}>
+                  {selected && <MaterialCommunityIcons name="check-bold" size={16} color="#fff" />}
+                </View>
+              )}
               {multi && (
                 <Pressable accessibilityLabel={`${count} of ${goal} done`} onPress={complete} hitSlop={10}>
                   <Animated.View style={checkStyle}>
@@ -284,6 +303,16 @@ export function ItemRow({ item, done, count, overdue, plus, minus, onToggle, onT
                   </Animated.View>
                 </View>
               )}
+              {selecting && (
+                <Pressable
+                  accessibilityLabel={selected ? `Deselect ${item.title}` : `Select ${item.title}`}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    onSelect?.();
+                  }}
+                  style={StyleSheet.absoluteFill}
+                />
+              )}
               {burst && <XpBurst key={burst.key} amount={burst.amount} color={colors.xp} />}
             </View>
           </Pressable>
@@ -294,6 +323,7 @@ export function ItemRow({ item, done, count, overdue, plus, minus, onToggle, onT
 }
 
 const styles = StyleSheet.create({
+  selectDot: { width: 26, height: 26, borderRadius: 13, borderWidth: 2.5, alignItems: 'center', justifyContent: 'center' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

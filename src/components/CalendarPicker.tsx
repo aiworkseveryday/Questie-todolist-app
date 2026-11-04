@@ -10,8 +10,18 @@ import { AppText } from './AppText';
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
-/** Month calendar for picking a due date. Past days are disabled. */
-export function CalendarPicker({ value, onChange }: { value: string | null; onChange: (iso: string) => void }) {
+/** Month calendar. Days outside min…max (YYYY-MM-DD) are disabled; by default only past days are. */
+export function CalendarPicker({
+  value,
+  onChange,
+  min = todayISO(),
+  max,
+}: {
+  value: string | null;
+  onChange: (iso: string) => void;
+  min?: string;
+  max?: string;
+}) {
   const { colors } = useTheme();
   const today = todayISO();
   const [month, setMonth] = useState(() => startOfMonth(value ? fromISODate(value) : new Date()));
@@ -21,7 +31,8 @@ export function CalendarPicker({ value, onChange }: { value: string | null; onCh
   // Leading blanks so the 1st lands under its weekday, then pad to whole weeks
   const cells: (number | null)[] = [...Array(first).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
   while (cells.length % 7) cells.push(null);
-  const canGoBack = month > startOfMonth(new Date());
+  const canGoBack = month > startOfMonth(fromISODate(min));
+  const canGoForward = !max || month < startOfMonth(fromISODate(max));
 
   const nav = (icon: 'chevron-left' | 'chevron-right', delta: number, enabled: boolean) => (
     <Pressable
@@ -42,7 +53,7 @@ export function CalendarPicker({ value, onChange }: { value: string | null; onCh
       <View style={styles.header}>
         {nav('chevron-left', -1, canGoBack)}
         <AppText variant="heading">{formatMonth(month)}</AppText>
-        {nav('chevron-right', 1, true)}
+        {nav('chevron-right', 1, canGoForward)}
       </View>
       <View style={styles.week}>
         {WEEKDAYS.map((d, i) => (
@@ -56,7 +67,7 @@ export function CalendarPicker({ value, onChange }: { value: string | null; onCh
           {cells.slice(row * 7, row * 7 + 7).map((day, i) => {
             if (day == null) return <View key={i} style={styles.cell} />;
             const iso = toISODate(new Date(month.getFullYear(), month.getMonth(), day));
-            const past = iso < today;
+            const past = iso < min || (!!max && iso > max);
             const selected = iso === value;
             const isToday = iso === today;
             return (

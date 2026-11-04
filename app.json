@@ -46,7 +46,8 @@
       ],
       "expo-font",
       "./plugins/with-long-path-cmake",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": false,

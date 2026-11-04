@@ -7,7 +7,7 @@ import * as Haptics from 'expo-haptics';
 
 import { AppText } from '@/components/AppText';
 import { Button3D } from '@/components/Button3D';
-import { CalendarPicker } from '@/components/CalendarPicker';
+import { DateField } from '@/components/DateField';
 import { DIFFICULTY_COLOR } from '@/components/ItemRow';
 import { Input } from '@/components/Input';
 import { Screen } from '@/components/Screen';
@@ -20,7 +20,6 @@ import { radius, space, tint } from '@/theme/tokens';
 
 const KINDS: { id: ItemKind; label: string; hint: string }[] = [
   { id: 'habit', label: 'Habit', hint: 'Repeats on the days you choose, once or several times a day. Keeps your streak alive.' },
-  { id: 'counter', label: 'Good / Bad', hint: 'Tap + when you do the good thing, − when you slip. Any time, any day.' },
   { id: 'todo', label: 'To-do', hint: 'A one-off task. Disappears the day after you finish it.' },
 ];
 const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard'];
@@ -54,7 +53,7 @@ export default function ItemEditor() {
   const { colors } = useTheme();
   const existing = id ? items.find((i) => i.id === Number(id)) : undefined;
 
-  const [kind, setKind] = useState<ItemKind>(existing?.kind ?? 'habit');
+  const [kind, setKind] = useState<ItemKind>(existing?.kind === 'todo' ? 'todo' : 'habit');
   const [title, setTitle] = useState(existing?.title ?? '');
   const [difficulty, setDifficulty] = useState<Difficulty>(existing?.difficulty ?? 'easy');
   const [days, setDays] = useState<number[]>(existing?.days.length ? existing.days : ALL_DAYS);
@@ -119,7 +118,7 @@ export default function ItemEditor() {
         label="Title"
         value={title}
         onChangeText={setTitle}
-        placeholder={kind === 'counter' ? 'Drink water / Doomscrolling' : kind === 'todo' ? 'Book dentist' : 'Read 10 pages'}
+        placeholder={kind === 'todo' ? 'Book dentist' : 'Read 10 pages'}
         autoFocus={!existing}
         maxLength={60}
       />
@@ -242,7 +241,7 @@ export default function ItemEditor() {
               />
             )}
           </View>
-          <CalendarPicker value={due} onChange={setDue} />
+          <DateField value={due} onChange={setDue} placeholder="Pick a due date (optional)" />
           {due && (
             <View style={styles.timeRow}>
               <Pressable

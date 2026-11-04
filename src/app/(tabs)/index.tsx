@@ -61,11 +61,37 @@ export default function Today() {
 }
 
 function TodayContent() {
-  const { profile, items, today, toggle, tap, deleteItem } = useGame();
+  const { profile, items, today, toggle, tap, deleteItem, deleteItems } = useGame();
   const { colors } = useTheme();
   const buddy = useBuddy();
   const [feedOpen, setFeedOpen] = useState(false);
+  // Quests picked for deleting; null when not in selection mode
+  const [selected, setSelected] = useState<Set<number> | null>(null);
   if (!profile) return null;
+
+  const toggleSelect = (id: number) =>
+    setSelected((cur) => {
+      const next = new Set(cur ?? []);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next.size ? next : null;
+    });
+
+  const confirmDeleteSelected = () => {
+    if (!selected?.size) return;
+    const n = selected.size;
+    Alert.alert(`Delete ${n} quest${n > 1 ? 's' : ''}?`, 'They and all their history will be removed. XP and coins you already earned stay.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteItems([...selected]);
+          setSelected(null);
+        },
+      },
+    ]);
+  };
 
   const now = new Date();
   const status = streakStatus(profile, now);
@@ -74,16 +100,13 @@ function TodayContent() {
   const eating = !!buddy?.eating;
   const due = items.filter((i) => isDueOn(i, now));
   const taps = (i: Item) => today.filter((c) => c.item_id === i.id && c.delta > 0).length;
-  // A quest the pet is still walking over to tick shows as unfinished until the tick is drawn
-  const isDone = (i: Item) =>
-    !buddy?.pending.has(i.id) && (i.kind === 'todo' ? i.done_on != null : taps(i) >= Math.max(1, i.target));
+  const isDone = (i: Item) => (i.kind === 'todo' ? i.done_on != null : taps(i) >= Math.max(1, i.target));
   const isOverdue = (i: Item) => i.kind === 'todo' && !i.done_on && !!i.due && dueAt(i.due, i.due_time) < now;
   // Unfinished first, so what's left stays at the top
   const byDone = (a: Item, b: Item) => Number(isDone(a)) - Number(isDone(b));
   // Todos: unfinished first, then soonest due; undated ones after dated ones
   const dueKey = (i: Item) => (i.due ? `${i.due} ${i.due_time ?? '99'}` : '~');
   const habits = due.filter((i) => i.kind === 'habit').sort(byDone);
-  const counters = due.filter((i) => i.kind === 'counter');
   const todos = due
     .filter((i) => i.kind === 'todo')
     .sort((a, b) => byDone(a, b) || dueKey(a).localeCompare(dueKey(b)));
@@ -108,12 +131,24 @@ function TodayContent() {
       onTap={(d) => tap(i, d)}
       onEdit={() => router.push({ pathname: '/item', params: { id: String(i.id) } })}
       onDelete={() => confirmDelete(i)}
+      selecting={!!selected}
+      selected={!!selected?.has(i.id)}
+      onSelect={() => toggleSelect(i.id)}
     />
   );
 
   return (
     <>
       <Screen>
+        {selected ? (
+          <View style={[styles.selectBar, { backgroundColor: colors.primarySoft, borderColor: colors.primary }]}>
+            <Button3D title="Cancel" tone="ghost" small onPress={() => setSelected(null)} />
+            <AppText variant="heading" style={{ flex: 1 }} center>
+              {selected.size} selected
+            </AppText>
+            <Button3D title="Delete" icon="trash-can" tone="danger" small onPress={confirmDeleteSelected} />
+          </View>
+        ) : (
         <View style={styles.header}>
           <View style={[styles.stat, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <AppText variant="label" color={status.streak ? colors.streak : colors.textMuted}>
@@ -133,6 +168,7 @@ function TodayContent() {
             <AppText variant="caption">{lvl.level}</AppText>
           </ProgressRing>
         </View>
+        )}
 
         <Card style={{ gap: space.md }}>
           <View style={styles.petCard}>
@@ -184,14 +220,13 @@ function TodayContent() {
               Your quest log is empty
             </AppText>
             <AppText muted center>
-              Add a habit like &quot;Drink water&quot; or &quot;Read 10 pages&quot;, or a to-do. Swipe right to complete, swipe left
-              to edit.
+              Add a habit like &quot;Drink water&quot; or &quot;Read 10 pages&quot;, or a to-do. Swipe right to complete, swipe left to edit, and long-press to select several to delete.
+
             </AppText>
           </Card>
         ) : (
           <>
             <Section title="Daily quests" items={habits} render={row} />
-            <Section title="Good & bad habits" items={counters} render={row} />
             <Section title="To-dos" items={todos} render={row} />
           </>
         )}
@@ -205,6 +240,7 @@ function TodayContent() {
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  selectBar: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.xs, borderRadius: radius.lg, borderWidth: 2 },
   stat: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.pill, borderWidth: 2 },
   petCard: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   bubble: { flex: 1, gap: space.xs, padding: space.md, borderRadius: radius.md },

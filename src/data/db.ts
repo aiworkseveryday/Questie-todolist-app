@@ -48,6 +48,10 @@ const MIGRATIONS = [
   ALTER TABLE items ADD COLUMN due_time TEXT;
   ALTER TABLE items ADD COLUMN notif_id TEXT;
   `,
+  // Good/bad habits were retired: they become normal daily habits (their history stays)
+  `
+  UPDATE items SET kind = 'habit', days = '0,1,2,3,4,5,6', target = 1 WHERE kind = 'counter';
+  `,
 ];
 
 /** Runs on open (SQLiteProvider onInit): brings the schema up to date. */
@@ -114,6 +118,31 @@ export async function deleteItem(db: SQLiteDatabase, id: number) {
     await db.runAsync('DELETE FROM completions WHERE item_id = ?', id);
     await db.runAsync('DELETE FROM items WHERE id = ?', id);
   });
+}
+
+/** Deletes several quests and their history in one go. */
+export async function deleteItems(db: SQLiteDatabase, ids: number[]) {
+  if (!ids.length) return;
+  const marks = ids.map(() => '?').join(',');
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(`DELETE FROM completions WHERE item_id IN (${marks})`, ...ids);
+    await db.runAsync(`DELETE FROM items WHERE id IN (${marks})`, ...ids);
+  });
+}
+
+/** Removes history logged before a date (YYYY-MM-DD). XP, coins and streaks already earned are kept. */
+export async function deleteHistoryBefore(db: SQLiteDatabase, date: string) {
+  const res = await db.runAsync('DELETE FROM completions WHERE date < ?', date);
+  return res.changes;
+}
+
+/** Every logged entry with its quest, oldest first, for the CSV export. */
+export function loadHistoryRows(db: SQLiteDatabase) {
+  return db.getAllAsync<{ date: string; title: string; kind: string; delta: number; xp: number; coins: number }>(
+    `SELECT c.date, COALESCE(i.title, 'Deleted quest') AS title, COALESCE(i.kind, '') AS kind, c.delta, c.xp, c.coins
+       FROM completions c LEFT JOIN items i ON i.id = c.item_id
+      ORDER BY c.date, c.id`,
+  );
 }
 
 export async function setTodoDone(db: SQLiteDatabase, id: number, doneOn: string | null) {

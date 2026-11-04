@@ -29,6 +29,10 @@ type GameContextValue = {
   updateProfile: (patch: Partial<Profile>) => Promise<void>;
   saveItem: (d: db.ItemDraft) => Promise<void>;
   deleteItem: (id: number) => Promise<void>;
+  /** Deletes several quests and their history */
+  deleteItems: (ids: number[]) => Promise<void>;
+  /** Clears history before a date; resolves to how many entries were removed */
+  deleteHistoryBefore: (date: string) => Promise<number>;
   /** Check off a habit or todo, or undo it when already done today */
   toggle: (item: Item) => Promise<void>;
   /** Good (+1) or bad (-1) tap on a counter habit */
@@ -215,6 +219,17 @@ export function GameProvider({ children }: { children: ReactNode }) {
       await db.deleteItem(sql, id);
       setToday((t) => t.filter((c) => c.item_id !== id));
       await reloadItems();
+    },
+    deleteItems: async (ids) => {
+      for (const id of ids) await cancelReminder(items.find((i) => i.id === id)?.notif_id ?? null);
+      await db.deleteItems(sql, ids);
+      setToday((t) => t.filter((c) => !ids.includes(c.item_id)));
+      await reloadItems();
+    },
+    deleteHistoryBefore: async (date) => {
+      const n = await db.deleteHistoryBefore(sql, date);
+      setToday(await db.loadCompletions(sql, todayISO()));
+      return n;
     },
     toggle,
     tap,

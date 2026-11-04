@@ -12,32 +12,24 @@ import {
   type RefObject,
 } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import Animated, {
-  Easing,
-  cancelAnimation,
-  useAnimatedProps,
-  useAnimatedStyle,
-  useSharedValue,
-  withSequence,
-  withTiming,
-} from 'react-native-reanimated';
-import Svg, { Path } from 'react-native-svg';
+import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming } from 'react-native-reanimated';
 
 import { FoodIcon } from '@/characters/FoodIcon';
-import { Pet } from '@/characters/Pet';
+import { HOP_GROUND, Pet, STEP_MS, type PetAction, type PetMood } from '@/characters/Pet';
 import { HOME_DOOR } from '@/characters/PetHome';
-import { mouthPoint, pencilTip, type RigAction, type RigMood } from '@/characters/PetRig';
 import type { PetSpecies } from '@/data/types';
 import type { Mood } from '@/game/engine';
 
 /** A mounted native view, which can report where it sits on screen. */
 export type ViewRef = ComponentRef<typeof View>;
 
-const SIZE = 68;
-/** Walking speed in px per ms. */
+const SIZE = 84;
+/** Walking speed for the cat and dragon, in px per ms. */
 const SPEED = 0.07;
+/** Distance covered by one bunny hop. */
+const HOP = 36;
 /** Fraction of the pet's box from the top down to its feet. */
-const FEET = 0.9;
+const FEET = 0.93;
 
 type BuddyApi = {
   /** Attach to the home in the top card so the pet knows where its door is. */
@@ -48,11 +40,7 @@ type BuddyApi = {
   sleeping: boolean;
   /** Pet is eating right now. */
   eating: boolean;
-  /** Quests the pet is walking over to tick: shown as not-done until it has drawn the tick. */
-  pending: Set<number>;
-  drawTick: (row: ViewRef | null, itemId: number) => void;
-  /** A happy hop for good-habit taps. */
-  cheer: () => void;
+  /** The pet runs home and eats this food in front of its door. */
   feed: (foodId: string) => void;
   /** Call the pet out of its home (tap on the home). */
   callOut: () => void;
@@ -60,7 +48,7 @@ type BuddyApi = {
 
 const BuddyContext = createContext<BuddyApi | null>(null);
 
-/** Rows and the Today screen use this. Outside the Today screen it is null. */
+/** The Today screen uses this. Outside it, it is null. */
 export function useBuddy() {
   return useContext(BuddyContext);
 }
@@ -79,42 +67,11 @@ function measure(v: ViewRef | null) {
   });
 }
 
-/** Pencil stroke that draws a check mark, then fades. */
-function TickStroke({ x, y }: { x: number; y: number }) {
-  const t = useSharedValue(0);
-  useEffect(() => {
-    t.value = withTiming(1, { duration: 650, easing: Easing.inOut(Easing.quad) });
-  }, [t]);
-  const props = useAnimatedProps(() => ({ strokeDashoffset: 32 * (1 - t.value) }));
-  return (
-    <View pointerEvents="none" style={{ position: 'absolute', left: x - 16, top: y - 16, width: 32, height: 32 }}>
-      <Svg width={32} height={32} viewBox="-16 -16 32 32">
-        <AnimatedPathTick animatedProps={props} />
-      </Svg>
-    </View>
-  );
-}
-const AnimatedPath = Animated.createAnimatedComponent(Path);
-function AnimatedPathTick({ animatedProps }: { animatedProps: object }) {
-  return (
-    <AnimatedPath
-      d="M-9 0 L-3 7 L10 -8"
-      stroke="#22C58B"
-      strokeWidth={4}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      fill="none"
-      strokeDasharray="32"
-      animatedProps={animatedProps}
-    />
-  );
-}
-
-/** Food on the ground that shrinks bite by bite. */
+/** Food set down in front of the home, shrinking bite by bite. */
 function GroundFood({ id, x, y, bites }: { id: string; x: number; y: number; bites: number }) {
   const left = Math.max(0, 1 - bites / 3);
   if (left <= 0) return null;
-  const size = 30 * (0.35 + 0.65 * left);
+  const size = 34 * (0.35 + 0.65 * left);
   return (
     <View pointerEvents="none" style={{ position: 'absolute', left: x - size / 2, top: y - size, width: size, height: size }}>
       <FoodIcon id={id} size={size} />
@@ -123,9 +80,9 @@ function GroundFood({ id, x, y, bites }: { id: string; x: number; y: number; bit
 }
 
 /**
- * The one and only pet on the Today screen. It lives in the home in the top card, walks out to greet
- * you when the app opens, then roams the whole page on its legs. It eats food set in front of its mouth,
- * walks over to draw the tick on quests you complete, and goes home to sleep at night.
+ * The one and only pet on the Today screen. It lives in the home in the top card, comes out to greet
+ * you when the app opens, then roams the page: the cat and dragon walk, the bunny hops. When fed it
+ * goes back to its home and eats in front of the door. At night it goes home to sleep.
  */
 export function BuddyProvider({
   species,
@@ -146,16 +103,12 @@ export function BuddyProvider({
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [out, setOut] = useState(false);
   const [sleeping, setSleeping] = useState(false);
-  const [action, setAction] = useState<RigAction>('idle');
-  const [moodOverride, setMoodOverride] = useState<RigMood | null>(null);
-  const [pending, setPending] = useState<Set<number>>(new Set());
+  const [action, setAction] = useState<PetAction>('idle');
+  const [moodOverride, setMoodOverride] = useState<PetMood | null>(null);
   const [food, setFood] = useState<{ id: string; x: number; y: number; bites: number } | null>(null);
-  const [tick, setTick] = useState<{ key: number; x: number; y: number } | null>(null);
 
   const x = useSharedValue(0);
   const y = useSharedValue(0);
-  const facing = useSharedValue(1);
-  const hop = useSharedValue(0);
   const appear = useSharedValue(0);
 
   // Everything the pet does runs one task at a time from this queue; roaming fills the gaps.
@@ -172,18 +125,30 @@ export function BuddyProvider({
     setOut(v);
   };
 
-  /** Walk to a point (top-left of the pet). Roaming walks give way as soon as a task arrives. */
-  const walkTo = useCallback(
+  /** Go to a point (top-left of the pet): walking for the cat and dragon, hop by hop for the bunny. */
+  const moveTo = useCallback(
     async (tx: number, ty: number, interruptible = false) => {
       const fx = x.get();
       const fy = y.get();
       const d = Math.hypot(tx - fx, ty - fy);
       if (d < 2) return;
-      facing.set(tx >= fx ? 1 : -1);
-      const ms = d / SPEED;
+      let ms: number;
       setAction('walk');
-      x.set(withTiming(tx, { duration: ms, easing: Easing.linear }));
-      y.set(withTiming(ty, { duration: ms, easing: Easing.linear }));
+      if (species === 'bunny') {
+        // Only move while in the air, so each hop lands before the next one starts
+        const n = Math.max(1, Math.ceil(d / HOP));
+        const ground = STEP_MS * HOP_GROUND;
+        const air = STEP_MS - ground;
+        const hopsX = Array.from({ length: n }, (_, i) => withDelay(ground, withTiming(fx + ((tx - fx) * (i + 1)) / n, { duration: air, easing: Easing.inOut(Easing.quad) })));
+        const hopsY = Array.from({ length: n }, (_, i) => withDelay(ground, withTiming(fy + ((ty - fy) * (i + 1)) / n, { duration: air, easing: Easing.inOut(Easing.quad) })));
+        x.set(withSequence(...hopsX));
+        y.set(withSequence(...hopsY));
+        ms = n * STEP_MS;
+      } else {
+        ms = d / SPEED;
+        x.set(withTiming(tx, { duration: ms, easing: Easing.linear }));
+        y.set(withTiming(ty, { duration: ms, easing: Easing.linear }));
+      }
       const start = Date.now();
       while (alive.current && Date.now() - start < ms) {
         if (interruptible && queue.current.length) {
@@ -195,27 +160,23 @@ export function BuddyProvider({
       }
       setAction('idle');
     },
-    [x, y, facing],
+    [x, y, species],
   );
 
-  const happyHop = useCallback(
-    async (ms = 1100) => {
-      setMoodOverride('celebrate');
-      hop.set(withSequence(withTiming(-14, { duration: 180, easing: Easing.out(Easing.quad) }), withTiming(0, { duration: 220, easing: Easing.in(Easing.quad) })));
-      Haptics.selectionAsync();
-      await wait(ms);
-      setMoodOverride(null);
-    },
-    [hop],
-  );
+  const happy = useCallback(async (ms: number) => {
+    setMoodOverride('celebrate');
+    Haptics.selectionAsync();
+    await wait(ms);
+    setMoodOverride(null);
+  }, []);
 
-  /** Door position in overlay coordinates: where the pet stands to enter or leave its home. */
+  /** Where the pet stands to go in or out of its home, in overlay coordinates. */
   const doorSpot = useCallback(async () => {
     const [c, h] = await Promise.all([measure(container.current), measure(homeRef.current)]);
     if (!c || !h) return null;
-    const dx = h.x - c.x + (HOME_DOOR.x / 120) * h.w;
-    const dy = h.y - c.y + (HOME_DOOR.y / 100) * h.h;
-    return { x: dx - SIZE / 2, y: dy - SIZE * FEET };
+    const cx = h.x - c.x + (HOME_DOOR.x / 120) * h.w;
+    const bottom = h.y - c.y + (HOME_DOOR.y / 100) * h.h;
+    return { x: cx - SIZE / 2, y: bottom - SIZE * FEET, cx, bottom };
   }, []);
 
   const comeOut = useCallback(
@@ -226,34 +187,31 @@ export function BuddyProvider({
       setSleeping(false);
       x.set(door.x);
       y.set(door.y);
-      facing.set(1);
       setIsOut(true);
       appear.set(withTiming(1, { duration: 450, easing: Easing.out(Easing.cubic) }));
-      await wait(250);
-      // Step out and down onto the page
-      await walkTo(door.x + 30, door.y + 90);
+      await wait(350);
       if (greet) {
         setMoodOverride('celebrate');
         setAction('wave');
         Haptics.selectionAsync();
-        await wait(1500);
+        await wait(1600);
         setAction('idle');
         setMoodOverride(null);
       }
     },
-    [doorSpot, walkTo, x, y, facing, appear],
+    [doorSpot, x, y, appear],
   );
 
   const goHome = useCallback(async () => {
     if (!outRef.current) return;
     const door = await doorSpot();
-    if (door) await walkTo(door.x, door.y);
+    if (door) await moveTo(door.x, door.y);
     appear.set(withTiming(0, { duration: 350 }));
     await wait(350);
     setIsOut(false);
-  }, [doorSpot, walkTo, appear]);
+  }, [doorSpot, moveTo, appear]);
 
-  // The brain: run queued tasks, otherwise roam (or sleep at home at night)
+  // The pet's day: do queued tasks, otherwise roam, or sleep at home at night
   useEffect(() => {
     if (!box.w) return;
     alive.current = true;
@@ -277,19 +235,17 @@ export function BuddyProvider({
           await comeOut(false);
           continue;
         }
-        // Roam anywhere on the page, keeping clear of the Add button corner
+        // Wander anywhere on the page, keeping clear of the Add button corner
         const { w, h } = boxRef.current;
-        let tx = 6 + Math.random() * Math.max(0, w - SIZE - 12);
-        let ty = 120 + Math.random() * Math.max(0, h - SIZE - 140);
-        if (tx > w - 210 && ty > h - 150) ty = h - 220;
-        await walkTo(tx, ty, true);
+        const tx = 6 + Math.random() * Math.max(0, w - SIZE - 12);
+        let ty = 110 + Math.random() * Math.max(0, h - SIZE - 130);
+        if (tx > w - 220 && ty > h - 160) ty = h - 240;
+        await moveTo(tx, ty, true);
         if (queue.current.length) continue;
-        // Pause and look around
+        // Stop and look around for a bit
         const pause = 1500 + Math.random() * 3000;
         const start = Date.now();
-        if (Math.random() < 0.4) facing.set(-facing.get());
         while (alive.current && Date.now() - start < pause && !queue.current.length) await wait(100);
-        tx = ty = 0;
       }
     })();
     return () => {
@@ -303,73 +259,33 @@ export function BuddyProvider({
     queue.current.push(task);
   }, []);
 
-  const drawTick = useCallback<BuddyApi['drawTick']>(
-    (row, itemId) => {
-      setPending((p) => new Set(p).add(itemId));
-      const reveal = () =>
-        setPending((p) => {
-          const n = new Set(p);
-          n.delete(itemId);
-          return n;
-        });
-      enqueue(async () => {
-        await comeOut(false);
-        const [c, r] = await Promise.all([measure(container.current), measure(row)]);
-        if (!c || !r) return reveal();
-        // Checkbox centre: card border + padding + half the 32px checkbox
-        const cb = { x: r.x - c.x + 2 + 16 + 16, y: r.y - c.y + r.h / 2 };
-        const tip = pencilTip(stage);
-        // Stand just right of the checkbox, facing it, with the pencil tip on it
-        const tx = cb.x - ((120 - tip.x) / 120) * SIZE;
-        const ty = cb.y - (tip.y / 120) * SIZE;
-        await walkTo(tx, ty);
-        facing.set(-1);
-        setAction('draw');
-        await wait(250);
-        setTick({ key: Date.now(), x: cb.x, y: cb.y });
-        await wait(750);
-        setAction('idle');
-        reveal();
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        await happyHop(1000);
-        setTick(null);
-      });
-    },
-    [enqueue, comeOut, walkTo, facing, happyHop, stage],
-  );
-
   const feed = useCallback<BuddyApi['feed']>(
     (foodId) => {
       enqueue(async () => {
-        await comeOut(false);
-        // Set the food on the ground right under its mouth
-        const m = mouthPoint(species, stage);
-        const f = facing.get();
-        const mx = f > 0 ? (m.x / 120) * SIZE : ((120 - m.x) / 120) * SIZE;
-        const fx = x.get() + mx + f * SIZE * 0.08;
-        const fy = y.get() + SIZE * FEET + 2;
-        setFood({ id: foodId, x: fx, y: fy, bites: 0 });
+        const door = await doorSpot();
+        if (!door) return;
+        // The food appears in front of the home straight away; the pet heads back to eat it
+        setFood({ id: foodId, x: door.cx, y: door.bottom + 10, bites: 0 });
+        if (outRef.current) await moveTo(door.x, door.y);
+        else await comeOut(false);
         setMoodOverride('happy');
-        await wait(400);
-        // Three big bites in time with the jaw
+        await wait(300);
         setAction('eat');
         for (let b = 1; b <= 3; b++) {
-          await wait(700);
-          setFood((fd) => (fd ? { ...fd, bites: b } : fd));
+          await wait(600);
+          setFood((f) => (f ? { ...f, bites: b } : f));
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
         setFood(null);
-        // Chew, swallow, smile
         setAction('chew');
-        await wait(1600);
+        await wait(1500);
         setAction('idle');
-        await happyHop(1400);
+        await happy(1400);
       });
     },
-    [enqueue, comeOut, species, stage, facing, x, y, happyHop],
+    [enqueue, doorSpot, moveTo, comeOut, happy],
   );
 
-  const cheer = useCallback(() => enqueue(() => happyHop(900)), [enqueue, happyHop]);
   const callOut = useCallback(() => enqueue(() => comeOut(true)), [enqueue, comeOut]);
 
   const onTapPet = () =>
@@ -384,13 +300,12 @@ export function BuddyProvider({
 
   const petStyle = useAnimatedStyle(() => ({
     opacity: appear.value,
-    transform: [{ translateX: x.value }, { translateY: y.value + hop.value }, { scale: 0.6 + appear.value * 0.4 }],
+    transform: [{ translateX: x.value }, { translateY: y.value }, { scale: 0.6 + appear.value * 0.4 }],
   }));
-  const flipStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: facing.value }] }));
 
   const api = useMemo<BuddyApi>(
-    () => ({ homeRef, out, sleeping, eating: !!food || action === 'chew', pending, drawTick, cheer, feed, callOut }),
-    [out, sleeping, food, action, pending, drawTick, cheer, feed, callOut],
+    () => ({ homeRef, out, sleeping, eating: !!food || action === 'chew', feed, callOut }),
+    [out, sleeping, food, action, feed, callOut],
   );
 
   return (
@@ -402,17 +317,15 @@ export function BuddyProvider({
           pointerEvents="box-none"
           style={StyleSheet.absoluteFill}
           onLayout={(e) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
-          {food && <GroundFood id={food.id} x={food.x} y={food.y} bites={food.bites} />}
-          {tick && <TickStroke key={tick.key} x={tick.x} y={tick.y} />}
           {out && (
             <Animated.View style={[styles.pet, petStyle]}>
               <Pressable accessibilityLabel="Your pet" onPress={onTapPet} hitSlop={6}>
-                <Animated.View style={flipStyle}>
-                  <Pet species={species} stage={stage} accessory={accessory} size={SIZE} mood={moodOverride ?? mood} action={action} />
-                </Animated.View>
+                <Pet species={species} stage={stage} accessory={accessory} size={SIZE} mood={moodOverride ?? mood} action={action} />
               </Pressable>
             </Animated.View>
           )}
+          {/* in front of the pet, so it looks like it's eating from the bowl */}
+          {food && <GroundFood id={food.id} x={food.x} y={food.y} bites={food.bites} />}
         </View>
       </View>
     </BuddyContext.Provider>
