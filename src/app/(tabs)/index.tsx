@@ -1,14 +1,15 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
-import Animated, { LinearTransition, ZoomIn } from 'react-native-reanimated';
+import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated';
 
 import { Pet } from '@/characters/Pet';
 import { AppText } from '@/components/AppText';
+import { BuddyProvider } from '@/components/Buddy';
 import { Button3D } from '@/components/Button3D';
 import { Card } from '@/components/Card';
 import { FeedSheet } from '@/components/FeedSheet';
-import { Feeding } from '@/components/Feeding';
+import { EATING_MS, EatingScene } from '@/components/Feeding';
 import { ItemRow } from '@/components/ItemRow';
 import { ProgressRing } from '@/components/Progress';
 import { Screen } from '@/components/Screen';
@@ -17,6 +18,7 @@ import type { Item } from '@/data/types';
 import { greeting, isDueOn, levelFor, petMood, petStage, streakStatus, type StreakState } from '@/game/engine';
 import { dueAt, toISODate } from '@/lib/dates';
 import { useTheme } from '@/theme/ThemeProvider';
+import { SLIDE_MS, SPRING } from '@/theme/motion';
 import { radius, space } from '@/theme/tokens';
 
 const PET_LINES: Record<StreakState, (pet: string) => string> = {
@@ -34,7 +36,7 @@ function Section({ title, items, render }: { title: string; items: Item[]; rende
         {title}
       </AppText>
       {items.map((i) => (
-        <Animated.View key={i.id} layout={LinearTransition.springify().damping(18)}>
+        <Animated.View key={i.id} layout={LinearTransition.springify().damping(SPRING.damping).stiffness(SPRING.stiffness)}>
           {render(i)}
         </Animated.View>
       ))}
@@ -92,7 +94,7 @@ export default function Today() {
   );
 
   return (
-    <View style={{ flex: 1 }}>
+    <BuddyProvider species={profile.pet} stage={petStage(lvl.level)} accessory={profile.pet_accessory}>
       <Screen>
         <View style={styles.header}>
           <View style={[styles.stat, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -116,24 +118,32 @@ export default function Today() {
 
         <Card style={{ gap: space.md }}>
           <View style={styles.petCard}>
-            <View>
+            {eating ? (
+              <EatingScene
+                key={eating.key}
+                species={profile.pet}
+                stage={petStage(lvl.level)}
+                accessory={profile.pet_accessory}
+                foodId={eating.food}
+                size={84}
+              />
+            ) : (
               <Pet
                 species={profile.pet}
-                mood={eating ? 'celebrate' : petMood(status.state, fedToday)}
+                mood={petMood(status.state, fedToday)}
                 stage={petStage(lvl.level)}
                 accessory={profile.pet_accessory}
                 size={84}
               />
-              {eating && <Feeding key={eating.key} foodId={eating.food} />}
-            </View>
+            )}
             {/* The pet's speech bubble pops in each time the app opens */}
             <Animated.View
-              entering={ZoomIn.springify().damping(12).delay(250)}
+              entering={FadeIn.duration(SLIDE_MS).delay(200)}
               style={[styles.bubble, { backgroundColor: colors.primarySoft }]}>
               <View style={[styles.bubbleTail, { borderRightColor: colors.primarySoft }]} />
               <AppText variant="heading">
                 {eating
-                  ? 'Yum yum! 😋'
+                  ? 'Nom nom nom… 😋'
                   : checkable.length && progress === 1
                     ? `All done, ${profile.name}!`
                     : `${greeting(now)}, ${profile.name}!`}
@@ -156,7 +166,7 @@ export default function Today() {
             setFeedOpen(false);
             const key = Date.now();
             setEating({ key, food });
-            setTimeout(() => setEating((e) => (e?.key === key ? null : e)), 2600);
+            setTimeout(() => setEating((e) => (e?.key === key ? null : e)), EATING_MS);
           }}
         />
 
@@ -181,7 +191,7 @@ export default function Today() {
       <View style={styles.fab} pointerEvents="box-none">
         <Button3D title="Add" icon="plus-thick" onPress={() => router.push('/item')} />
       </View>
-    </View>
+    </BuddyProvider>
   );
 }
 

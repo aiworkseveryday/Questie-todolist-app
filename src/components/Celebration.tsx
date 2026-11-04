@@ -1,7 +1,7 @@
 import { Modal, StyleSheet, View } from 'react-native';
 
 import { Pet } from '@/characters/Pet';
-import { levelFor, petStage, PET_STAGES } from '@/game/engine';
+import { levelFor, petStage } from '@/game/engine';
 import { useGame } from '@/data/store';
 import { useTheme } from '@/theme/ThemeProvider';
 import { palette, radius, space } from '@/theme/tokens';
@@ -22,8 +22,7 @@ export function Celebration() {
   if (reward?.levelUp) {
     emoji = '⭐';
     title = `Level ${reward.newLevel}!`;
-    const grown = PET_STAGES.find((st) => st.level === reward.newLevel);
-    body = grown ? `${profile.pet_name} grew into a ${grown.name}! Look how big they are!` : 'Your hero grew stronger. New unlocks are on the way.';
+    body = 'Your hero grew stronger. New unlocks are on the way.';
     accent = palette.violet;
   } else if (reward?.tokenEarned) {
     emoji = '🧊';

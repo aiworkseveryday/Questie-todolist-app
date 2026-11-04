@@ -1,4 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -111,8 +112,16 @@ export default function HeroScreen() {
         <Stat emoji="🪙" value={profile.coins} label="Coins" />
       </View>
 
-      <Card style={{ gap: space.md }}>
-        <AppText variant="heading">This week</AppText>
+      <Card style={{ gap: space.md }} onPress={() => router.push('/history')}>
+        <View style={styles.growthHead}>
+          <AppText variant="heading">This week</AppText>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <AppText variant="caption" color={colors.primary}>
+              View history
+            </AppText>
+            <MaterialCommunityIcons name="chevron-right" size={18} color={colors.primary} />
+          </View>
+        </View>
         <View style={styles.chart}>
           {week.map((d) => {
             const isToday = toISODate(d.date) === toISODate(new Date());

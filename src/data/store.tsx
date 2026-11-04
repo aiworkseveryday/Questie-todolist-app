@@ -1,9 +1,9 @@
 import * as Haptics from 'expo-haptics';
 import { useSQLiteContext } from 'expo-sqlite';
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 
-import { gain, penalty, tapXp, type GainResult } from '@/game/engine';
+import { gain, levelFor, penalty, petStage, tapXp, type GainResult } from '@/game/engine';
 import { buy, feed } from '@/game/shop';
 import { chooseStyle, type StyleOption } from '@/game/style';
 import { todayISO } from '@/lib/dates';
@@ -22,6 +22,9 @@ type GameContextValue = {
   today: Completion[];
   reward: Reward | null;
   dismissReward: () => void;
+  /** Set when the pet grows into a new stage; shown after any level-up celebration */
+  evolution: { stage: number } | null;
+  dismissEvolution: () => void;
   createProfile: (p: Pick<Profile, 'name' | 'gender' | 'look' | 'pet' | 'pet_name' | 'hair' | 'hair_color' | 'skin' | 'outfit'>) => Promise<void>;
   updateProfile: (patch: Partial<Profile>) => Promise<void>;
   saveItem: (d: db.ItemDraft) => Promise<void>;
@@ -49,12 +52,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<Item[]>([]);
   const [today, setToday] = useState<Completion[]>([]);
   const [reward, setReward] = useState<Reward | null>(null);
+  const [evolution, setEvolution] = useState<{ stage: number } | null>(null);
+  // Latest saved profile, so every save can tell whether it crossed a pet growth stage
+  const profileRef = useRef<Profile | null>(null);
 
   const [day, setDay] = useState(todayISO);
 
   useEffect(() => {
     (async () => {
       const [p, i, c] = await Promise.all([db.loadProfile(sql), db.loadItems(sql), db.loadCompletions(sql, day)]);
+      profileRef.current = p;
       setProfile(p);
       setItems(i);
       setToday(c);
@@ -77,8 +84,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const persist = useCallback(
     async (next: Profile) => {
+      const prev = profileRef.current;
+      profileRef.current = next;
       setProfile(next);
       await db.saveProfile(sql, next);
+      // Every way of gaining XP passes through here, so this is where the pet evolves
+      if (prev && next.onboarded) {
+        const before = petStage(levelFor(prev.xp).level);
+        const after = petStage(levelFor(next.xp).level);
+        if (after > before) setEvolution({ stage: after });
+      }
     },
     [sql],
   );
@@ -94,7 +109,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setToday((t) => [...t, c]);
       await persist({ ...p, ...result.patch, xp: p.xp + xp, coins: p.coins + result.coins });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      if (result.levelUp || result.increased || result.tokenEarned) setReward({ ...result, xp, title: item.title });
+      const newLevel = levelFor(p.xp + xp).level;
+      const levelUp = newLevel > levelFor(p.xp).level;
+      if (levelUp || result.increased || result.tokenEarned) setReward({ ...result, xp, levelUp, newLevel, title: item.title });
     },
     [sql, persist],
   );
@@ -122,6 +139,21 @@ export function GameProvider({ children }: { children: ReactNode }) {
         setToday((t) => [...t, c]);
         await persist({ ...profile, xp: profile.xp + xp });
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        // Small taps can tip you over into the next level too
+        const newLevel = levelFor(profile.xp + xp).level;
+        if (newLevel > levelFor(profile.xp).level) {
+          setReward({
+            patch: { streak: profile.streak, best_streak: profile.best_streak, last_active_on: profile.last_active_on, freeze_tokens: profile.freeze_tokens },
+            increased: false,
+            freezesUsed: 0,
+            tokenEarned: false,
+            xp,
+            coins: 0,
+            levelUp: true,
+            newLevel,
+            title: item.title,
+          });
+        }
       } else {
         await earn(profile, item, tapXp(item.difficulty, goal));
         if (item.kind === 'todo') {
@@ -155,6 +187,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     today,
     reward,
     dismissReward: () => setReward(null),
+    evolution,
+    dismissEvolution: () => setEvolution(null),
     createProfile: (p) =>
       persist({ ...db.PROFILE_DEFAULTS, ...p, xp: 0, coins: 0, streak: 0, best_streak: 0, last_active_on: null, freeze_tokens: 0, onboarded: true }),
     updateProfile: async (patch) => {
@@ -209,6 +243,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     },
     resetAll: async () => {
       await db.resetAll(sql);
+      profileRef.current = null;
       setItems([]);
       setToday([]);
       setProfile(null);

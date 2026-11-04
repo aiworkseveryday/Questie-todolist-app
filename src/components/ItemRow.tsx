@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Haptics from 'expo-haptics';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { GestureDetector, Pressable, usePanGesture } from 'react-native-gesture-handler';
 import Animated, {
@@ -18,8 +18,10 @@ import type { Difficulty, Item } from '@/data/types';
 import { REWARD, tapXp } from '@/game/engine';
 import { formatDue } from '@/lib/dates';
 import { useTheme } from '@/theme/ThemeProvider';
+import { POP, POP_SCALE, SPRING } from '@/theme/motion';
 import { palette, radius, space, tint } from '@/theme/tokens';
 import { AppText } from './AppText';
+import { useBuddy, type ViewRef } from './Buddy';
 
 export const DIFFICULTY_COLOR: Record<Difficulty, string> = {
   easy: palette.mint,
@@ -31,7 +33,6 @@ export const DIFFICULTY_COLOR: Record<Difficulty, string> = {
 const COMPLETE_AT = 90;
 /** Width of the edit/delete tray revealed by dragging left */
 const TRAY = 136;
-const SPRING = { damping: 18, stiffness: 220 };
 
 type Props = {
   item: Item;
@@ -106,6 +107,8 @@ export function ItemRow({ item, done, count, overdue, plus, minus, onToggle, onT
   const start = useSharedValue(0);
   const armed = useSharedValue(false);
   const pop = useSharedValue(1);
+  const rowRef = useRef<ViewRef>(null);
+  const buddy = useBuddy();
   const [burst, setBurst] = useState<{ key: number; amount: number } | null>(null);
   const isCounter = item.kind === 'counter';
   const accent = DIFFICULTY_COLOR[item.difficulty];
@@ -124,8 +127,10 @@ export function ItemRow({ item, done, count, overdue, plus, minus, onToggle, onT
       // A step towards the goal pays a little; the final tap pays the full reward too
       amount = count + 1 < goal ? step : reward + step;
     }
-    pop.value = withSequence(withSpring(1.25, { damping: 6 }), withSpring(1));
+    pop.value = withSequence(withSpring(POP_SCALE, POP), withSpring(1, POP));
     setBurst({ key: Date.now(), amount });
+    // The pet buddy runs over to stamp finished quests (and every good tap)
+    if (isCounter || count + 1 >= goal) buddy?.stamp(rowRef.current);
   };
   const tick = () => Haptics.selectionAsync();
   const close = () => {
@@ -173,7 +178,7 @@ export function ItemRow({ item, done, count, overdue, plus, minus, onToggle, onT
   const checkStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
 
   return (
-    <View>
+    <View ref={rowRef} collapsable={false}>
       <Animated.View style={[styles.under, { backgroundColor: colors.success }, leftStyle]}>
         <MaterialCommunityIcons name={isCounter ? 'plus-thick' : done ? 'undo' : 'check-bold'} size={28} color="#fff" />
       </Animated.View>

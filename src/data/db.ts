@@ -143,3 +143,44 @@ export function loadDailyTotals(db: SQLiteDatabase, since: string) {
     since,
   );
 }
+
+export type DayTotals = { date: string; done: number; bad: number; xp: number; coins: number };
+
+/** Per-day totals between two dates (inclusive), for the history calendar and stats. */
+export function loadDayTotals(db: SQLiteDatabase, from: string, to: string) {
+  return db.getAllAsync<DayTotals>(
+    `SELECT date,
+            SUM(CASE WHEN delta > 0 THEN 1 ELSE 0 END) AS done,
+            SUM(CASE WHEN delta < 0 THEN 1 ELSE 0 END) AS bad,
+            SUM(xp) AS xp,
+            SUM(coins) AS coins
+       FROM completions WHERE date BETWEEN ? AND ? GROUP BY date ORDER BY date`,
+    from,
+    to,
+  );
+}
+
+export type DayEntry = { id: number; title: string; kind: string; delta: number; xp: number; coins: number };
+
+/** Everything logged on one day, in the order it happened. Deleted quests show as "Deleted quest". */
+export function loadDayEntries(db: SQLiteDatabase, date: string) {
+  return db.getAllAsync<DayEntry>(
+    `SELECT c.id, COALESCE(i.title, 'Deleted quest') AS title, COALESCE(i.kind, 'habit') AS kind, c.delta, c.xp, c.coins
+       FROM completions c LEFT JOIN items i ON i.id = c.item_id
+      WHERE c.date = ? ORDER BY c.id`,
+    date,
+  );
+}
+
+/** Most-completed quests in a date range. */
+export function loadTopItems(db: SQLiteDatabase, from: string, to: string, limit = 3) {
+  return db.getAllAsync<{ title: string; count: number }>(
+    `SELECT COALESCE(i.title, 'Deleted quest') AS title, COUNT(*) AS count
+       FROM completions c LEFT JOIN items i ON i.id = c.item_id
+      WHERE c.date BETWEEN ? AND ? AND c.delta > 0
+      GROUP BY c.item_id ORDER BY count DESC LIMIT ?`,
+    from,
+    to,
+    limit,
+  );
+}

@@ -6,6 +6,7 @@ import { FoodIcon } from '@/characters/FoodIcon';
 import { useGame } from '@/data/store';
 import { FOODS } from '@/game/shop';
 import { useTheme } from '@/theme/ThemeProvider';
+import { EASE_OUT, SLIDE_MS } from '@/theme/motion';
 import { radius, space } from '@/theme/tokens';
 import { AppText } from './AppText';
 import { Button3D } from './Button3D';
@@ -22,7 +23,7 @@ export function FeedSheet({ visible, onClose, onFed }: { visible: boolean; onClo
       <Animated.View entering={FadeIn} style={styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
         <Animated.View
-          entering={SlideInDown.springify().damping(16)}
+          entering={SlideInDown.duration(SLIDE_MS).easing(EASE_OUT)}
           style={[styles.sheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={[styles.grabber, { backgroundColor: colors.border }]} />
           <AppText variant="title">Feed {profile.pet_name}</AppText>

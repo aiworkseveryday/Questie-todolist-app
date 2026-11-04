@@ -12,6 +12,7 @@ import { useGame } from '@/data/store';
 import { levelFor, MAX_FREEZES, petStage } from '@/game/engine';
 import { ACCESSORIES, BOOSTS, FOODS, type ShopItem } from '@/game/shop';
 import { useTheme } from '@/theme/ThemeProvider';
+import { EASE_OUT, SLIDE_MS } from '@/theme/motion';
 import { radius, space } from '@/theme/tokens';
 
 function ItemCard({ item, owned, onBuy, disabled }: { item: ShopItem; owned: number; onBuy: () => void; disabled: boolean }) {
@@ -145,7 +146,7 @@ export default function Shop() {
       {toast && (
         <Animated.View
           key={toast.key}
-          entering={FadeInDown.springify().damping(14)}
+          entering={FadeInDown.duration(SLIDE_MS).easing(EASE_OUT)}
           exiting={FadeOut}
           style={[styles.toast, { backgroundColor: toast.ok ? colors.success : colors.danger }]}
           onLayout={() => setTimeout(() => setToast((t) => (t?.key === toast.key ? null : t)), 1800)}>

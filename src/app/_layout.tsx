@@ -16,6 +16,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Celebration } from '@/components/Celebration';
+import { Evolution } from '@/components/Evolution';
 import { DB_NAME, migrate } from '@/data/db';
 import { GameProvider, useGame } from '@/data/store';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
@@ -56,12 +57,14 @@ function RootStack() {
         <Stack.Protected guard={onboarded}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="item" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="history" />
         </Stack.Protected>
         <Stack.Protected guard={!onboarded}>
           <Stack.Screen name="onboarding" />
         </Stack.Protected>
       </Stack>
       <Celebration />
+      <Evolution />
       {/* Android draws edge-to-edge: keep scrolled content from showing through the status bar */}
       <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top, backgroundColor: colors.bg }} />
     </NavThemeProvider>
