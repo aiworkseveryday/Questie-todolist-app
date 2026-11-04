@@ -29,7 +29,7 @@ import Animated, {
 import { BITE_COUNT, CRUMB_COLOR, FoodIcon } from '@/characters/FoodIcon';
 import { HERO_FEET_Y, HERO_SIDE_HAND, HeroActor, type HeroAction } from '@/characters/HeroActor';
 import { HOP_GROUND, Pet, STEP_MS, type PetAction, type PetMood } from '@/characters/Pet';
-import { HOME_DOOR } from '@/characters/PetHome';
+import { HOME_DOOR, HOME_H, PLATE } from '@/characters/PetHome';
 import { AppText } from '@/components/AppText';
 import type { HeroGender, PetSpecies } from '@/data/types';
 import type { Mood } from '@/game/engine';
@@ -189,6 +189,8 @@ export function BuddyProvider({
   const roll = useSharedValue(0);
   // When each recent feeding was asked for, to spot overfeeding
   const feedTimes = useRef<number[]>([]);
+  // Where the hero is headed, kept on the JS side (a shared value set from JS isn't readable straight away)
+  const heroAt = useRef({ x: 0, y: 0 });
 
   // Everything the pet does runs one task at a time from this queue; roaming fills the gaps.
   const queue = useRef<(() => Promise<void>)[]>([]);
@@ -255,9 +257,10 @@ export function BuddyProvider({
    */
   const heroWalk = useCallback(
     async (tx: number, ty: number, facing?: -1 | 1) => {
-      const fx = hx.get();
-      const d = Math.hypot(tx - fx, ty - hy.get());
+      const { x: fx, y: fy } = heroAt.current;
+      const d = Math.hypot(tx - fx, ty - fy);
       if (d < 2) return;
+      heroAt.current = { x: tx, y: ty };
       const ms = d / HERO_SPEED;
       const dir = facing ?? (tx < fx ? -1 : 1);
       setActor((a) => a && { ...a, action: 'walk', facing: dir });
@@ -271,42 +274,49 @@ export function BuddyProvider({
   const heroDo = (action: HeroAction, change: { holding?: string | null; facing?: -1 | 0 | 1 } = {}) =>
     setActor((a) => a && { ...a, action, ...change });
 
-  /** Too much food: the pet puffs up into a ball, rolls over on the ground and cries that it can't eat any more. */
-  const overfed = useCallback(async () => {
-    setMoodOverride('sad');
-    setStuffed(true);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    fat.set(withSpring(1, { damping: 6, stiffness: 110 }));
-    await wait(700);
-    // Roll over one way and back like a ball, towards whichever side has room
-    const dir = x.get() + SIZE + 50 < boxRef.current.w ? 1 : -1;
-    const from = x.get();
-    const rollOnce = async (to: number, turn: number) => {
-      roll.set(withTiming(turn, { duration: 950, easing: Easing.inOut(Easing.quad) }));
-      x.set(withTiming(to, { duration: 950, easing: Easing.inOut(Easing.quad) }));
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      await wait(1000);
-    };
-    await rollOnce(from + dir * 46, dir);
-    wobble.set(withRepeat(withSequence(withTiming(1, { duration: 260 }), withTiming(-1, { duration: 260 })), -1, true));
-    await wait(1100);
-    cancelAnimation(wobble);
-    wobble.set(withTiming(0, { duration: 150 }));
-    await rollOnce(from, 0);
-    await wait(500);
-    fat.set(withTiming(0, { duration: 900, easing: Easing.inOut(Easing.quad) }));
-    setStuffed(false);
-    await wait(700);
-    setMoodOverride(null);
-  }, [fat, wobble, roll, x]);
+  /**
+   * Too much food: the pet puffs up into a ball (`onPuff` runs right then), rolls over a little and
+   * cries that it can't eat any more, then slowly shrinks back.
+   */
+  const overfed = useCallback(
+    async (onPuff?: () => void) => {
+      setMoodOverride('sad');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      fat.set(withSpring(1, { damping: 6, stiffness: 110 }));
+      onPuff?.();
+      await wait(900);
+      // A small roll away from the hero (who stands to the right) and back
+      const from = x.get();
+      const dir = from > 24 ? -1 : 1;
+      const rollTo = async (to: number, turn: number) => {
+        roll.set(withTiming(turn, { duration: 700, easing: Easing.inOut(Easing.quad) }));
+        x.set(withTiming(to, { duration: 700, easing: Easing.inOut(Easing.quad) }));
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        await wait(750);
+      };
+      await rollTo(from + dir * 18, dir * 0.3);
+      setStuffed(true);
+      wobble.set(withRepeat(withSequence(withTiming(1, { duration: 260 }), withTiming(-1, { duration: 260 })), -1, true));
+      await rollTo(from, 0);
+      await wait(1600);
+      cancelAnimation(wobble);
+      wobble.set(withTiming(0, { duration: 150 }));
+      fat.set(withTiming(0, { duration: 900, easing: Easing.inOut(Easing.quad) }));
+      setStuffed(false);
+      await wait(800);
+      setMoodOverride(null);
+    },
+    [fat, wobble, roll, x],
+  );
 
   /** Where the pet stands to go in or out of its home, in overlay coordinates. */
   const doorSpot = useCallback(async () => {
     const [c, h] = await Promise.all([measure(container.current), measure(homeRef.current)]);
     if (!c || !h) return null;
     const cx = h.x - c.x + (HOME_DOOR.x / 120) * h.w;
-    const bottom = h.y - c.y + (HOME_DOOR.y / 100) * h.h;
-    return { x: cx - SIZE / 2, y: bottom - SIZE * FEET, cx, bottom };
+    const bottom = h.y - c.y + (HOME_DOOR.y / HOME_H) * h.h;
+    const plateY = h.y - c.y + (PLATE.y / HOME_H) * h.h;
+    return { x: cx - SIZE / 2, y: bottom - SIZE * FEET, cx, bottom, plateY };
   }, []);
 
   const comeOut = useCallback(
@@ -398,20 +408,25 @@ export function BuddyProvider({
         const door = await doorSpot();
         if (!door) return;
         const plateX = door.cx;
-        const plateY = door.bottom + 10;
+        const plateY = door.plateY;
+        // The pet eats standing a little in front of its door, just behind the plate
+        const eatY = plateY - 16 - SIZE * FEET;
         // Hero lines up by its hands: over the plate when kneeling, then on the pet's head to pat it
         const kh = HERO_W / 120;
-        const heroY = plateY - HERO_FEET_Y * kh;
+        const placeY = plateY + 6 - HERO_FEET_Y * kh;
         const placeX = plateX - HERO_SIDE_HAND.crouch.x * kh;
+        const patY = plateY - 12 - HERO_FEET_Y * kh;
         const patX = door.cx + 16 - HERO_SIDE_HAND.pat.x * kh;
+        const offX = boxRef.current.w + 10;
 
         // The pet stops and watches excitedly while the hero walks in from the right with the food
         if (outRef.current) setMoodOverride('celebrate');
-        hx.set(boxRef.current.w + 10);
-        hy.set(heroY);
+        heroAt.current = { x: offX, y: placeY };
+        hx.set(offX);
+        hy.set(placeY);
         setActor({ action: 'walk', holding: foodId, facing: -1 });
         heroIn.set(withTiming(1, { duration: 250 }));
-        await heroWalk(placeX, heroY);
+        await heroWalk(placeX, placeY, -1);
 
         // Kneel, set the food on the plate, get up and shuffle back a step, still facing the pet
         heroDo('crouch');
@@ -422,21 +437,31 @@ export function BuddyProvider({
         await wait(380);
         heroDo('idle');
         await wait(200);
-        await heroWalk(patX, heroY, -1);
+        await heroWalk(patX, patY, -1);
 
         // The pet comes over to its plate
         setMoodOverride(null);
-        if (outRef.current) await moveTo(door.x, door.y);
-        else await comeOut(false);
+        if (!outRef.current) await comeOut(false);
+        await moveTo(door.x, eatY);
 
         // A pat on the head as it arrives
         heroDo('pat');
         setMoodOverride('happy');
         Haptics.selectionAsync();
         await wait(1500);
-        heroDo('idle');
 
-        // Eat bite by bite while the hero waits right there
+        const heroLeaves = async () => {
+          heroDo('wave', { facing: 0 });
+          await wait(1100);
+          await heroWalk(offX, heroAt.current.y);
+          heroIn.set(withTiming(0, { duration: 200 }));
+          await wait(200);
+          setActor(null);
+        };
+        // Normally the hero heads off after the pat; if it's one meal too many, it hangs about
+        const hero = tooMuch ? heroWalk(patX + 46, patY, -1) : heroLeaves();
+
+        // Eat bite by bite
         await wait(150);
         setAction('eat');
         for (let b = 1; b <= BITE_COUNT; b++) {
@@ -448,22 +473,23 @@ export function BuddyProvider({
         await wait(600);
         setFood(null);
         setAction('chew');
-        heroDo('pat');
         await wait(1300);
         setAction('idle');
 
-        // Turn to say bye, then walk off to the right while the pet reacts
-        heroDo('wave', { facing: 0 });
-        const leave = (async () => {
-          await wait(1200);
-          await heroWalk(boxRef.current.w + 10, heroY);
-          heroIn.set(withTiming(0, { duration: 200 }));
-          await wait(200);
-          setActor(null);
-        })();
-        if (tooMuch) await overfed();
-        else await happy(1400);
-        await leave;
+        if (!tooMuch) {
+          await happy(1400);
+          await hero;
+          return;
+        }
+        // Too full: the pet puffs up, the hero panics, the pet rolls about crying, then settles
+        await hero;
+        await overfed(async () => {
+          heroDo('panic', { facing: 0 });
+        });
+        // Phew, it's fine: the hero relaxes, waves and leaves
+        heroDo('idle');
+        await wait(700);
+        await heroLeaves();
       });
     },
     [enqueue, doorSpot, moveTo, comeOut, happy, heroWalk, overfed, hx, hy, heroIn],

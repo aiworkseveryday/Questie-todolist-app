@@ -25,7 +25,7 @@ const GOLD = '#FFC233';
 /** One full walk cycle (left step + right step). */
 export const HERO_STEP_MS = 520;
 
-export type HeroAction = 'idle' | 'walk' | 'crouch' | 'pat' | 'cheer' | 'wave';
+export type HeroAction = 'idle' | 'walk' | 'crouch' | 'pat' | 'cheer' | 'wave' | 'panic';
 
 /** Where the feet touch the ground in the 120×150 drawing. */
 export const HERO_FEET_Y = 138;
@@ -87,6 +87,7 @@ function HeroFront({
   const wave = useSharedValue(0);
   const hop = useSharedValue(0);
   const tilt = useSharedValue(0);
+  const shake = useSharedValue(0);
 
   useEffect(() => {
     breath.value = withRepeat(withTiming(1, { duration: 2600, easing: Easing.linear }), -1);
@@ -117,15 +118,21 @@ function HeroFront({
     }
     // Bend the knees and reach down, with a soft settle
     crouch.value = action === 'crouch' ? withSpring(1, { damping: 14, stiffness: 140 }) : withSpring(0, { damping: 16, stiffness: 160 });
-    armUp.value = withTiming(action === 'wave' ? 1 : 0, { duration: 260 });
-    swordUp.value = withTiming(action === 'cheer' ? 1 : 0, { duration: 260 });
+    const panic = action === 'panic';
+    armUp.value = withTiming(action === 'wave' || panic ? 1 : 0, { duration: 260 });
+    swordUp.value = withTiming(action === 'cheer' || panic ? 1 : 0, { duration: 260 });
+    // Waving, or flailing both arms in a panic
+    const flail = panic ? 90 : 230;
     wave.value =
-      action === 'wave' ? withRepeat(withSequence(withTiming(1, { duration: 230 }), withTiming(-1, { duration: 230 })), -1) : withTiming(0, { duration: 150 });
+      action === 'wave' || panic
+        ? withRepeat(withSequence(withTiming(1, { duration: flail }), withTiming(-1, { duration: flail })), -1)
+        : withTiming(0, { duration: 150 });
+    shake.value = panic ? withRepeat(withSequence(withTiming(1, { duration: 60 }), withTiming(-1, { duration: 60 })), -1) : withTiming(0, { duration: 100 });
     hop.value =
       action === 'cheer'
         ? withRepeat(withSequence(withTiming(1, { duration: 240, easing: Easing.out(Easing.quad) }), withTiming(0, { duration: 240, easing: Easing.in(Easing.quad) })), -1)
         : withTiming(0, { duration: 150 });
-  }, [action, cycle, walk, crouch, armUp, swordUp, wave, hop]);
+  }, [action, cycle, walk, crouch, armUp, swordUp, wave, hop, shake]);
 
   // Body: bobs up on every step, sways side to side, sinks when crouching, hops when cheering
   const bodyStyle = useAnimatedStyle(() => {
@@ -133,7 +140,7 @@ function HeroFront({
     const br = Math.sin(breath.value * Math.PI * 2);
     const y = -Math.abs(s) * 3.2 * k * walk.value + crouch.value * 8 * k - hop.value * 9 * k + br * 0.5 * k;
     const rot = s * 3 * walk.value + tilt.value * 4 * walk.value;
-    return { transform: [{ translateY: y }, { rotate: `${rot}deg` }, { scaleY: 1 + br * 0.008 }] };
+    return { transform: [{ translateX: shake.value * 1.6 * k }, { translateY: y }, { rotate: `${rot}deg` }, { scaleY: 1 + br * 0.008 }] };
   });
   const shadowStyle = useAnimatedStyle(() => ({
     opacity: 1 - hop.value * 0.35,
@@ -162,7 +169,7 @@ function HeroFront({
   // Sword arm swings opposite the left one, or lifts the sword high to cheer
   const armRStyle = useAnimatedStyle(() => {
     const s = Math.sin(cycle.value * Math.PI * 2);
-    return { transform: [{ rotate: `${s * 18 * walk.value - swordUp.value * 140 + hop.value * 10 * swordUp.value}deg` }] };
+    return { transform: [{ rotate: `${s * 18 * walk.value - swordUp.value * 140 + hop.value * 10 * swordUp.value - wave.value * 14 * swordUp.value}deg` }] };
   });
   const capeStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${-Math.sin(cycle.value * Math.PI * 2) * 4 * walk.value - tilt.value * 5 * walk.value}deg` }],
@@ -176,6 +183,7 @@ function HeroFront({
   const skinShade = darken(l.skin, 0.14);
   const fs = size * 0.34;
   const happy = action === 'cheer' || action === 'wave';
+  const panic = action === 'panic';
 
   return (
     <View style={{ width: w, height: h }}>
@@ -266,8 +274,19 @@ function HeroFront({
             <Ellipse cx="37" cy="70" rx="7" ry="4.5" fill="#FF6FA8" opacity={0.35} />
             <Ellipse cx="83" cy="70" rx="7" ry="4.5" fill="#FF6FA8" opacity={0.35} />
             <Ellipse cx="60" cy="66.5" rx="2" ry="1.3" fill={darken(l.skin, 0.25)} opacity={0.6} />
-            <Path d={happy ? 'M51 70 Q60 84 69 70 Z' : 'M53 71 Q60 81 67 71 Z'} fill="#5A2333" />
-            <Ellipse cx="60" cy={happy ? 77 : 76} rx="3.4" ry="1.7" fill="#FF7A8A" />
+            {panic ? (
+              // a gasping "O" mouth, worried brows and a sweat drop
+              <G>
+                <Ellipse cx="60" cy="75" rx="5" ry="6.5" fill="#5A2333" />
+                <Path d="M40 41 Q46 45 52 46 M68 46 Q74 45 80 41" stroke={darken(l.hair, 0.2)} strokeWidth={2.6} strokeLinecap="round" fill="none" />
+                <Path d="M96 30 Q101 38 96 42 Q91 38 96 30 Z" fill="#7CC6FF" stroke="#3B86C4" strokeWidth={1} />
+              </G>
+            ) : (
+              <G>
+                <Path d={happy ? 'M51 70 Q60 84 69 70 Z' : 'M53 71 Q60 81 67 71 Z'} fill="#5A2333" />
+                <Ellipse cx="60" cy={happy ? 77 : 76} rx="3.4" ry="1.7" fill="#FF7A8A" />
+              </G>
+            )}
           </Part>
           {/* eyes: closed happy arcs when cheering, otherwise glossy and blinking */}
           {happy ? (

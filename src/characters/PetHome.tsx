@@ -12,6 +12,10 @@ const LINE = { stroke: INK, strokeOpacity: 0.5, strokeWidth: 1.4, strokeLinejoin
 
 /** Where the doorway sits in the home's 120×100 box, so the pet can walk in and out of it. */
 export const HOME_DOOR = { x: 60, y: 86, w: 38 };
+/** The home is drawn in a 120 × HOME_H box: the extra space under the house is the front yard. */
+export const HOME_H = 118;
+/** Where the pet's plate sits in that box, out in front of the door so the pet stands behind its food. */
+export const PLATE = { x: 60, y: 110 };
 
 /** A gentle "Zzz" drifting out of the doorway while the pet sleeps inside. */
 function Snore() {
@@ -33,8 +37,11 @@ function Snore() {
 function Plate() {
   return (
     <G>
-      <Ellipse cx={HOME_DOOR.x} cy={96} rx={20} ry={4} fill="#E9E4F5" {...LINE} />
-      <Ellipse cx={HOME_DOOR.x} cy={95.4} rx={13} ry={2.2} fill="#CFC6E6" />
+      {/* a patch of grass in front of the door with a worn path out to the plate */}
+      <Ellipse cx={60} cy={104} rx={50} ry={11} fill="#7CC36A" opacity={0.35} />
+      <Path d={`M${HOME_DOOR.x - 16} 95 L${HOME_DOOR.x + 16} 95 L${PLATE.x + 14} ${PLATE.y} L${PLATE.x - 14} ${PLATE.y} Z`} fill="#C9A06A" opacity={0.35} />
+      <Ellipse cx={PLATE.x} cy={PLATE.y} rx={20} ry={4.5} fill="#E9E4F5" {...LINE} />
+      <Ellipse cx={PLATE.x} cy={PLATE.y - 0.6} rx={13} ry={2.4} fill="#CFC6E6" />
     </G>
   );
 }
@@ -57,7 +64,7 @@ function NameSign({ name }: { name: string }) {
 /** Rocky cave with a warm glow inside: the dragon's home. */
 function Cave({ name }: { name: string }) {
   return (
-    <Svg width="100%" height="100%" viewBox="0 0 120 100">
+    <Svg width="100%" height="100%" viewBox={`0 0 120 ${HOME_H}`}>
       <Defs>
         <RadialGradient id="caveGlow" cx="50%" cy="70%" rx="50%" ry="50%">
           <Stop offset="0" stopColor="#FFB347" stopOpacity={0.9} />
@@ -84,7 +91,7 @@ function Cave({ name }: { name: string }) {
 function Doghouse({ name, species }: { name: string; species: PetSpecies }) {
   const roof = species === 'bunny' ? '#FF8CC4' : '#E2563B';
   return (
-    <Svg width="100%" height="100%" viewBox="0 0 120 100">
+    <Svg width="100%" height="100%" viewBox={`0 0 120 ${HOME_H}`}>
       <Ellipse cx={58} cy={95} rx={50} ry={5} fill="#1A1028" opacity={0.15} />
       {/* walls */}
       <Path d="M20 50 L60 22 L100 50 L100 96 L20 96 Z" fill="#E8B87A" {...LINE} />
@@ -109,7 +116,7 @@ function Doghouse({ name, species }: { name: string; species: PetSpecies }) {
  */
 export function PetHome({ species, name, size = 110, sleeping = false }: { species: PetSpecies; name: string; size?: number; sleeping?: boolean }) {
   return (
-    <View style={{ width: size, height: size * (100 / 120) }}>
+    <View style={{ width: size, height: size * (HOME_H / 120) }}>
       {species === 'dino' ? <Cave name={name} /> : <Doghouse name={name} species={species} />}
       {sleeping && <Snore />}
     </View>
