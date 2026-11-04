@@ -4,7 +4,7 @@ import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
 
 import { FoodIcon } from '@/characters/FoodIcon';
 import { useGame } from '@/data/store';
-import { FOODS } from '@/game/shop';
+import { FOODS, FREEBIES } from '@/game/shop';
 import { useTheme } from '@/theme/ThemeProvider';
 import { EASE_OUT, SLIDE_MS } from '@/theme/motion';
 import { radius, space } from '@/theme/tokens';
@@ -16,7 +16,7 @@ export function FeedSheet({ visible, onClose, onFed }: { visible: boolean; onClo
   const { profile, feedPet } = useGame();
   const { colors } = useTheme();
   if (!profile) return null;
-  const owned = FOODS.filter((f) => (profile.inventory[f.id] ?? 0) > 0);
+  const owned = [...FREEBIES, ...FOODS].filter((f) => (profile.inventory[f.id] ?? 0) > 0);
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>

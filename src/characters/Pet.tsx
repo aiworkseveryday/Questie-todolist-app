@@ -81,6 +81,9 @@ function Sparkle({ x, y, r, color }: { x: number; y: number; r: number; color: s
   );
 }
 
+/** Headroom above the drawing for the bunny's long ears. */
+const EAR_ROOM = 40;
+
 /** Still previews draw the whole pet as one SVG; moving pets stack a layer per part. */
 const FlatContext = createContext(false);
 
@@ -88,12 +91,18 @@ const FlatContext = createContext(false);
  * A full-size SVG layer, so each part of the pet can move on its own. It is cached as a
  * hardware texture, so moving it doesn't redraw the SVG every frame.
  */
-function Layer({ size, children, style }: { size: number; children: ReactNode; style?: object }) {
+function Layer({ size, children, style, room = 0 }: { size: number; children: ReactNode; style?: object; room?: number }) {
   const flat = useContext(FlatContext);
   if (flat) return <G>{children}</G>;
+  // `room` is extra canvas above the box (in drawing units) for parts that reach past the top, like long ears
+  const r = (room * size) / 120;
   return (
-    <Animated.View pointerEvents="none" renderToHardwareTextureAndroid shouldRasterizeIOS style={[StyleSheet.absoluteFill, style]}>
-      <Svg width={size} height={size} viewBox="0 0 120 120">
+    <Animated.View
+      pointerEvents="none"
+      renderToHardwareTextureAndroid
+      shouldRasterizeIOS
+      style={[{ position: 'absolute', left: 0, width: size, top: -r, height: size + r }, style]}>
+      <Svg width={size} height={size + r} viewBox={`0 ${-room} 120 ${120 + room}`}>
         {children}
       </Svg>
     </Animated.View>
@@ -113,7 +122,7 @@ function Frame({ size, flat, scale, originY, children }: { size: number; flat: b
     return (
       <FlatContext.Provider value>
         <View style={{ width: size, height: size }}>
-          <Svg width={size} height={size} viewBox="0 0 120 120">
+          <Svg width={size} height={(size * (120 + EAR_ROOM)) / 120} viewBox={`0 ${-EAR_ROOM} 120 ${120 + EAR_ROOM}`} style={{ position: 'absolute', top: (-EAR_ROOM * size) / 120 }}>
             <G transform={`translate(60 112) scale(${scale}) translate(-60 -112)`}>{children}</G>
           </Svg>
         </View>
@@ -661,7 +670,7 @@ export function Pet({ species, mood = 'happy', size = 90, stage = 1, accessory =
           {/* head: ears, face, eyes and mouth move together */}
           <Group style={[{ transformOrigin: [size / 2, neck, 0] }, headStyle]}>
             {bunny && (
-              <Layer size={size} style={[{ transformOrigin: [size / 2, earRoot, 0] }, earStyle]}>
+              <Layer size={size} room={EAR_ROOM} style={[{ transformOrigin: [size / 2, earRoot + px(EAR_ROOM), 0] }, earStyle]}>
                 <G transform={headT}>
                   <BunnyEars stage={st} c={c} />
                 </G>

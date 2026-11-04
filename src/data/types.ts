@@ -56,6 +56,8 @@ export type Profile = {
   fed_on: string | null;
   /** Cosmetics bought in the shop (outfits, hairstyles, pet accessories) */
   owned: string[];
+  /** Free treats picked up from the shop on a day */
+  freebies: { on: string | null; n: number };
   /** Accessory the pet is wearing */
   pet_accessory: string | null;
   /** Hero customisation (see game/style.ts) */

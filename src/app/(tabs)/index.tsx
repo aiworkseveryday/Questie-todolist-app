@@ -54,7 +54,8 @@ export default function Today() {
       species={profile.pet}
       stage={petStage(levelFor(profile.xp).level)}
       accessory={profile.pet_accessory}
-      mood={petMood(status.state, fedToday)}>
+      mood={petMood(status.state, fedToday)}
+      hero={{ gender: profile.gender, look: profile.look }}>
       <TodayContent />
     </BuddyProvider>
   );

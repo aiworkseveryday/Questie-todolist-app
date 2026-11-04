@@ -235,7 +235,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     tap,
     buyItem: async (itemId) => {
       if (!profile) return 'No profile';
-      const r = buy(profile, itemId);
+      const r = buy(profile, itemId, todayISO());
       if (!r.ok) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         return r.reason;

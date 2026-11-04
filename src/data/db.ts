@@ -7,10 +7,11 @@ export const DB_NAME = 'questie.db';
 /** Fields added after the first release, with the values older profiles should start from */
 export const PROFILE_DEFAULTS: Pick<
   Profile,
-  'inventory' | 'fed_on' | 'owned' | 'pet_accessory' | 'hair' | 'hair_color' | 'skin' | 'outfit'
+  'inventory' | 'fed_on' | 'freebies' | 'owned' | 'pet_accessory' | 'hair' | 'hair_color' | 'skin' | 'outfit'
 > = {
   inventory: {},
   fed_on: null,
+  freebies: { on: null, n: 0 },
   owned: [],
   pet_accessory: null,
   hair: 'crop',
@@ -137,11 +138,15 @@ export async function deleteHistoryBefore(db: SQLiteDatabase, date: string) {
 }
 
 /** Every logged entry with its quest, oldest first, for the CSV export. */
-export function loadHistoryRows(db: SQLiteDatabase) {
+/** History between two days, both included (YYYY-MM-DD). */
+export function loadHistoryRows(db: SQLiteDatabase, from: string, to: string) {
   return db.getAllAsync<{ date: string; title: string; kind: string; delta: number; xp: number; coins: number }>(
     `SELECT c.date, COALESCE(i.title, 'Deleted quest') AS title, COALESCE(i.kind, '') AS kind, c.delta, c.xp, c.coins
        FROM completions c LEFT JOIN items i ON i.id = c.item_id
+      WHERE c.date BETWEEN ? AND ?
       ORDER BY c.date, c.id`,
+    from,
+    to,
   );
 }
 

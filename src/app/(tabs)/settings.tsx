@@ -29,6 +29,9 @@ export default function Settings() {
   const [name, setName] = useState(profile?.name ?? '');
   const [petName, setPetName] = useState(profile?.pet_name ?? '');
   const [exporting, setExporting] = useState(false);
+  // Export range: the last 30 days by default
+  const [from, setFrom] = useState(() => toISODate(addDays(new Date(), -30)));
+  const [to, setTo] = useState(todayISO);
   // Default cut-off: keep the last 30 days
   const [cutoff, setCutoff] = useState(() => toISODate(addDays(new Date(), -30)));
   if (!profile) return null;
@@ -36,8 +39,8 @@ export default function Settings() {
   const exportCsv = async () => {
     setExporting(true);
     try {
-      const n = await exportHistoryCsv(sql);
-      if (n === 0) Alert.alert('Nothing to export', 'Complete some quests first, then your history can be exported.');
+      const n = await exportHistoryCsv(sql, from, to);
+      if (n === 0) Alert.alert('Nothing to export', `No quests were completed between ${formatDay(fromISODate(from))} and ${formatDay(fromISODate(to))}.`);
     } catch (e) {
       Alert.alert('Export failed', String(e));
     } finally {
@@ -111,7 +114,18 @@ export default function Settings() {
 
       <Card style={{ gap: space.md }}>
         <AppText variant="heading">History</AppText>
-        <AppText muted>Save everything you have completed as a spreadsheet file (CSV).</AppText>
+        <AppText muted>Save what you completed between two dates as a spreadsheet file (CSV).</AppText>
+        <DateField
+          label="From"
+          value={from}
+          onChange={(d) => {
+            setFrom(d);
+            if (d > to) setTo(d);
+          }}
+          min="2000-01-01"
+          max={todayISO()}
+        />
+        <DateField label="To" value={to} onChange={setTo} min={from} max={todayISO()} />
         <Button3D title="Export history (CSV)" icon="file-delimited" tone="outline" loading={exporting} onPress={exportCsv} />
         <View style={{ height: 1, backgroundColor: '#00000010' }} />
         <DateField label="Delete history older than" value={cutoff} onChange={setCutoff} min="2000-01-01" max={todayISO()} />

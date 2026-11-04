@@ -10,12 +10,26 @@ import { Card } from '@/components/Card';
 import { Screen } from '@/components/Screen';
 import { useGame } from '@/data/store';
 import { levelFor, MAX_FREEZES, petStage } from '@/game/engine';
-import { ACCESSORIES, BOOSTS, FOODS, type ShopItem } from '@/game/shop';
+import { ACCESSORIES, BOOSTS, FOODS, FREE_PER_DAY, freebieFor, freebiesLeft, type ShopItem } from '@/game/shop';
+import { todayISO } from '@/lib/dates';
 import { useTheme } from '@/theme/ThemeProvider';
 import { EASE_OUT, SLIDE_MS } from '@/theme/motion';
 import { radius, space } from '@/theme/tokens';
 
-function ItemCard({ item, owned, onBuy, disabled }: { item: ShopItem; owned: number; onBuy: () => void; disabled: boolean }) {
+function ItemCard({
+  item,
+  owned,
+  onBuy,
+  disabled,
+  label,
+}: {
+  item: ShopItem;
+  owned: number;
+  onBuy: () => void;
+  disabled: boolean;
+  /** Button text; the price by default */
+  label?: string;
+}) {
   const { colors } = useTheme();
   return (
     <Card style={styles.item}>
@@ -29,7 +43,7 @@ function ItemCard({ item, owned, onBuy, disabled }: { item: ShopItem; owned: num
       <AppText variant="caption" color={colors.textMuted}>
         Owned: {owned}
       </AppText>
-      <Button3D title={`🪙 ${item.price}`} small color={colors.coin} disabled={disabled} onPress={onBuy} style={{ alignSelf: 'stretch' }} />
+      <Button3D title={label ?? `🪙 ${item.price}`} small color={item.price ? colors.coin : colors.success} disabled={disabled} onPress={onBuy} style={{ alignSelf: 'stretch' }} />
     </Card>
   );
 }
@@ -41,11 +55,13 @@ export default function Shop() {
   const toastSeq = useRef(0);
   if (!profile) return null;
   const stage = petStage(levelFor(profile.xp).level);
+  const freebie = freebieFor(profile.pet);
+  const freeLeft = freebiesLeft(profile, todayISO());
 
   const purchase = async (item: ShopItem) => {
     const err = await buyItem(item.id);
     toastSeq.current += 1;
-    setToast({ key: toastSeq.current, text: err ?? `Bought ${item.name}!`, ok: !err });
+    setToast({ key: toastSeq.current, text: err ?? (item.price ? `Bought ${item.name}!` : `Got a free ${item.name.toLowerCase()}!`), ok: !err });
   };
 
   return (
@@ -72,6 +88,21 @@ export default function Shop() {
             Earn coins by finishing quests. Treat {profile.pet_name} to keep them happy, even on tough days!
           </AppText>
         </Card>
+
+        <AppText variant="caption" muted upper>
+          Free treat · {FREE_PER_DAY} a day
+        </AppText>
+        <View style={styles.grid}>
+          <ItemCard
+            item={freebie}
+            owned={profile.inventory[freebie.id] ?? 0}
+            disabled={freeLeft <= 0}
+            label={freeLeft > 0 ? `Free · ${freeLeft} left` : 'Back tomorrow'}
+            onBuy={() => purchase(freebie)}
+          />
+          {/* keeps the free card half width, like the others */}
+          <View style={styles.item} />
+        </View>
 
         <AppText variant="caption" muted upper>
           Pet food

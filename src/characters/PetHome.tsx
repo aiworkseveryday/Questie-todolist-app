@@ -29,6 +29,16 @@ function Snore() {
   );
 }
 
+/** The pet's plate in front of the doorway; the hero sets food down on it. */
+function Plate() {
+  return (
+    <G>
+      <Ellipse cx={HOME_DOOR.x} cy={96} rx={20} ry={4} fill="#E9E4F5" {...LINE} />
+      <Ellipse cx={HOME_DOOR.x} cy={95.4} rx={13} ry={2.2} fill="#CFC6E6" />
+    </G>
+  );
+}
+
 /** Wooden sign with the pet's name, propped against the home. */
 function NameSign({ name }: { name: string }) {
   const label = name.length > 9 ? `${name.slice(0, 8)}…` : name;
@@ -65,6 +75,7 @@ function Cave({ name }: { name: string }) {
       <Path d="M10 92 Q20 84 30 92 Q40 86 48 94 L10 96 Z M74 94 Q84 86 94 92 Q102 86 110 94 L110 96 L74 96 Z" fill="#5DBE7A" {...LINE} />
       <Path d="M100 48 L104 40 L108 48 L104 54 Z" fill="#7CC6FF" {...LINE} />
       <NameSign name={name} />
+      <Plate />
     </Svg>
   );
 }
@@ -86,9 +97,8 @@ function Doghouse({ name, species }: { name: string; species: PetSpecies }) {
       {/* round doorway */}
       <Path d={`M${HOME_DOOR.x - 18} 96 L${HOME_DOOR.x - 18} 66 Q${HOME_DOOR.x - 18} 48 ${HOME_DOOR.x} 48 Q${HOME_DOOR.x + 18} 48 ${HOME_DOOR.x + 18} 66 L${HOME_DOOR.x + 18} 96 Z`} fill="#4A2E24" {...LINE} />
       <Circle cx={60} cy={34} r={4} fill="#FFC233" {...LINE} />
-      {/* food bowl by the door */}
-      <Path d="M8 90 H26 L23 96 H11 Z" fill="#3BA7FF" {...LINE} />
       <NameSign name={name} />
+      <Plate />
     </Svg>
   );
 }
