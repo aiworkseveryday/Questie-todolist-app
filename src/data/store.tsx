@@ -116,9 +116,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
     [sql, persist],
   );
 
+  // Quests with a save in progress: rapid repeat taps are ignored so a goal can't be overshot
+  const inflight = useRef(new Set<number>());
+
   const toggle = useCallback<GameContextValue['toggle']>(
     async (item) => {
-      if (!profile) return;
+      if (!profile || inflight.current.has(item.id)) return;
+      inflight.current.add(item.id);
+      try {
       const taps = today.filter((c) => c.item_id === item.id && c.delta > 0);
       const goal = item.kind === 'habit' ? Math.max(1, item.target) : 1;
       if (taps.length >= goal) {
@@ -163,6 +168,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
         }
       }
       if (item.kind === 'todo') await reloadItems();
+      } finally {
+        inflight.current.delete(item.id);
+      }
     },
     [profile, today, sql, persist, earn, reloadItems],
   );

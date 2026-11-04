@@ -163,7 +163,7 @@ export default function HeroScreen() {
                   styles.stageBadge,
                   { borderColor: i === stage ? colors.primary : 'transparent', backgroundColor: colors.surfaceAlt },
                 ]}>
-                <Pet species={profile.pet} stage={i} size={46} mood={i <= stage ? 'happy' : 'idle'} />
+                <Pet species={profile.pet} stage={i} size={46} mood={i <= stage ? 'happy' : 'idle'} animated={false} />
               </View>
               <AppText variant="caption" muted={i !== stage} color={i === stage ? colors.primary : undefined} style={{ fontSize: 11 }}>
                 {i <= stage ? st.name : `Lv ${st.level}`}

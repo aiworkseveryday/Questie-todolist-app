@@ -1,15 +1,14 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated';
 
-import { Pet } from '@/characters/Pet';
+import { PetHome } from '@/characters/PetHome';
 import { AppText } from '@/components/AppText';
-import { BuddyProvider } from '@/components/Buddy';
+import { BuddyProvider, useBuddy } from '@/components/Buddy';
 import { Button3D } from '@/components/Button3D';
 import { Card } from '@/components/Card';
 import { FeedSheet } from '@/components/FeedSheet';
-import { EATING_MS, EatingScene } from '@/components/Feeding';
 import { ItemRow } from '@/components/ItemRow';
 import { ProgressRing } from '@/components/Progress';
 import { Screen } from '@/components/Screen';
@@ -44,21 +43,40 @@ function Section({ title, items, render }: { title: string; items: Item[]; rende
   );
 }
 
+/** The pet lives on this screen: its home is in the top card and it roams over everything here. */
 export default function Today() {
+  const { profile } = useGame();
+  if (!profile) return null;
+  const status = streakStatus(profile);
+  const fedToday = profile.fed_on === toISODate(new Date());
+  return (
+    <BuddyProvider
+      species={profile.pet}
+      stage={petStage(levelFor(profile.xp).level)}
+      accessory={profile.pet_accessory}
+      mood={petMood(status.state, fedToday)}>
+      <TodayContent />
+    </BuddyProvider>
+  );
+}
+
+function TodayContent() {
   const { profile, items, today, toggle, tap, deleteItem } = useGame();
   const { colors } = useTheme();
+  const buddy = useBuddy();
   const [feedOpen, setFeedOpen] = useState(false);
-  // Food currently being eaten; key replays the animation for back-to-back feeds
-  const [eating, setEating] = useState<{ key: number; food: string } | null>(null);
   if (!profile) return null;
 
   const now = new Date();
   const status = streakStatus(profile, now);
   const fedToday = profile.fed_on === toISODate(now);
   const lvl = levelFor(profile.xp);
+  const eating = !!buddy?.eating;
   const due = items.filter((i) => isDueOn(i, now));
   const taps = (i: Item) => today.filter((c) => c.item_id === i.id && c.delta > 0).length;
-  const isDone = (i: Item) => (i.kind === 'todo' ? i.done_on != null : taps(i) >= Math.max(1, i.target));
+  // A quest the pet is still walking over to tick shows as unfinished until the tick is drawn
+  const isDone = (i: Item) =>
+    !buddy?.pending.has(i.id) && (i.kind === 'todo' ? i.done_on != null : taps(i) >= Math.max(1, i.target));
   const isOverdue = (i: Item) => i.kind === 'todo' && !i.done_on && !!i.due && dueAt(i.due, i.due_time) < now;
   // Unfinished first, so what's left stays at the top
   const byDone = (a: Item, b: Item) => Number(isDone(a)) - Number(isDone(b));
@@ -94,7 +112,7 @@ export default function Today() {
   );
 
   return (
-    <BuddyProvider species={profile.pet} stage={petStage(lvl.level)} accessory={profile.pet_accessory}>
+    <>
       <Screen>
         <View style={styles.header}>
           <View style={[styles.stat, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -118,24 +136,14 @@ export default function Today() {
 
         <Card style={{ gap: space.md }}>
           <View style={styles.petCard}>
-            {eating ? (
-              <EatingScene
-                key={eating.key}
-                species={profile.pet}
-                stage={petStage(lvl.level)}
-                accessory={profile.pet_accessory}
-                foodId={eating.food}
-                size={84}
-              />
-            ) : (
-              <Pet
-                species={profile.pet}
-                mood={petMood(status.state, fedToday)}
-                stage={petStage(lvl.level)}
-                accessory={profile.pet_accessory}
-                size={84}
-              />
-            )}
+            {/* The pet's home: it walks out of here when the app opens, and the doorway stays empty while it roams */}
+            <Pressable
+              accessibilityLabel={`${profile.pet_name}'s home`}
+              onPress={() => buddy?.callOut()}
+              ref={buddy?.homeRef}
+              collapsable={false}>
+              <PetHome species={profile.pet} name={profile.pet_name} size={104} sleeping={!!buddy?.sleeping && !buddy?.out} />
+            </Pressable>
             {/* The pet's speech bubble pops in each time the app opens */}
             <Animated.View
               entering={FadeIn.duration(SLIDE_MS).delay(200)}
@@ -150,7 +158,9 @@ export default function Today() {
               </AppText>
               <AppText muted>
                 {eating
-                  ? `${profile.pet_name} loves you! Happy all day.`
+                  ? `${profile.pet_name} is munching happily.`
+                  : buddy?.sleeping && !buddy?.out
+                    ? `${profile.pet_name} is fast asleep in their home. Tap the home to wake them.`
                   : fedToday && status.state !== 'done'
                     ? `${profile.pet_name} is full and happy. Check off a quest to grow your streak!`
                     : PET_LINES[status.state](profile.pet_name)}
@@ -164,9 +174,7 @@ export default function Today() {
           onClose={() => setFeedOpen(false)}
           onFed={(food) => {
             setFeedOpen(false);
-            const key = Date.now();
-            setEating({ key, food });
-            setTimeout(() => setEating((e) => (e?.key === key ? null : e)), EATING_MS);
+            buddy?.feed(food);
           }}
         />
 
@@ -191,7 +199,7 @@ export default function Today() {
       <View style={styles.fab} pointerEvents="box-none">
         <Button3D title="Add" icon="plus-thick" onPress={() => router.push('/item')} />
       </View>
-    </BuddyProvider>
+    </>
   );
 }
 

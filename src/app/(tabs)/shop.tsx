@@ -97,7 +97,7 @@ export default function Shop() {
             const wearing = profile.pet_accessory === a.id;
             return (
               <Card key={a.id} style={styles.item}>
-                <Pet species={profile.pet} stage={stage} accessory={a.id} mood="happy" size={64} />
+                <Pet species={profile.pet} stage={stage} accessory={a.id} mood="happy" size={64} animated={false} />
                 <AppText variant="label" center numberOfLines={1}>
                   {a.name}
                 </AppText>

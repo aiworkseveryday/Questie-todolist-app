@@ -129,8 +129,9 @@ export function ItemRow({ item, done, count, overdue, plus, minus, onToggle, onT
     }
     pop.value = withSequence(withSpring(POP_SCALE, POP), withSpring(1, POP));
     setBurst({ key: Date.now(), amount });
-    // The pet buddy runs over to stamp finished quests (and every good tap)
-    if (isCounter || count + 1 >= goal) buddy?.stamp(rowRef.current);
+    // The pet walks over to draw the tick on finished quests, and cheers good-habit taps
+    if (isCounter) buddy?.cheer();
+    else if (count + 1 >= goal) buddy?.drawTick(rowRef.current, item.id);
   };
   const tick = () => Haptics.selectionAsync();
   const close = () => {
